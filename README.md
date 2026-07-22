@@ -1,6 +1,6 @@
 # Hfu.VoiceRegistration
 
-External advertising PoC for HFU voice-assisted registration. The current implementation contains the Stage 1 runnable skeleton, Stage 2 pure domain model, Stage 3 in-memory conversation session management, Stage 4 application-level backend registration tools, Stage 5 reference data for region matching, and Stage 6 fake HFU registration completion.
+External advertising PoC for HFU voice-assisted registration. The current implementation contains the Stage 1 runnable skeleton, Stage 2 pure domain model, Stage 3 in-memory conversation session management, Stage 4 application-level backend registration tools, Stage 5 reference data for region matching, Stage 6 fake HFU registration completion, and Stage 7 backend HTTP API.
 
 This PoC is not intended to process real personal data. Do not enter real user registration details into local demos.
 
@@ -47,6 +47,12 @@ Health endpoint:
 
 ```text
 http://localhost:5076/health
+```
+
+Swagger UI:
+
+```text
+http://localhost:5076/swagger
 ```
 
 Example response:
@@ -99,7 +105,7 @@ Stage 4 adds application-level backend registration tools behind `IRegistrationT
 
 The tools update the server-owned `RegistrationDraft` through `IConversationSessionStore`, validate supported field names, normalize basic values, reject invalid input without changing the draft, and return a `RegistrationToolResult` with the current registration state plus structured errors.
 
-This stage does not add HTTP endpoints or OpenAI integration. The future tool-call bridge should call this application service instead of editing registration state directly.
+The future OpenAI tool-call bridge should call this application service through the Stage 7 HTTP API instead of editing registration state directly.
 
 ## Reference Data
 
@@ -111,7 +117,7 @@ Stage 5 adds application-level Ukrainian region reference data:
 - ambiguous or unknown region values mark the affected field as `NeedsClarification`;
 - `RegistrationToolResult` returns `RegionAmbiguous` or `RegionNotFound` with Ukrainian suggestions when available.
 
-The resolver is integrated into `update_registration_fields` for `currentRegion` and `regionBeforeWar`. HTTP reference data endpoints are still deferred to the backend HTTP API stage.
+The resolver is integrated into `update_registration_fields` for `currentRegion` and `regionBeforeWar`. Stage 7 exposes the catalog at `GET /api/reference-data/regions`.
 
 ## Fake HFU Registration
 
@@ -124,7 +130,24 @@ Stage 6 adds the application-level `complete_registration` workflow and an infra
 - fake demo IDs use `DEMO-{year}-{counter:000000}`;
 - no real HFU backend is called.
 
-This stage still does not add HTTP registration endpoints. Future HTTP and OpenAI tool-call adapters should call the application service instead of submitting final registration payloads directly.
+Stage 7 exposes this workflow through typed HTTP endpoints. Future OpenAI tool-call adapters should call those endpoints instead of submitting final registration payloads directly.
+
+## Backend HTTP API
+
+Stage 7 exposes the registration flow over HTTP:
+
+- `POST /api/conversation-sessions`
+- `GET /api/conversation-sessions/{sessionId}`
+- `POST /api/conversation-sessions/{sessionId}/abandon`
+- `POST /api/conversation-sessions/{sessionId}/tools/update-registration-fields`
+- `POST /api/conversation-sessions/{sessionId}/tools/confirm-registration-fields`
+- `POST /api/conversation-sessions/{sessionId}/tools/mark-fields-for-clarification`
+- `POST /api/conversation-sessions/{sessionId}/tools/clear-registration-fields`
+- `POST /api/conversation-sessions/{sessionId}/tools/get-registration-state`
+- `POST /api/conversation-sessions/{sessionId}/tools/complete-registration`
+- `GET /api/reference-data/regions`
+
+Business tool errors return `200 OK` with structured `RegistrationToolResult` payloads and current state. Missing sessions and HTTP-layer conflicts return Problem Details.
 
 ## Frontend
 
@@ -187,7 +210,5 @@ These are intentionally not implemented yet:
 - OpenAI client or Realtime API
 - WebRTC
 - OpenAI tool-call bridge
-- HTTP registration endpoints
-- HTTP reference data endpoint
 - EF Core, database packages, Redis, or persistent storage
 - production HFU integration

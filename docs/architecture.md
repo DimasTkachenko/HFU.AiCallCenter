@@ -8,14 +8,15 @@
 
 ```mermaid
 flowchart LR
-    Browser["React/Vite frontend"] -->|GET /health| Api["ASP.NET Core API"]
+    Browser["React/Vite frontend"] -->|GET /health today| Api["ASP.NET Core API"]
+    Manual["Swagger/Postman"] -->|/api registration flow| Api
     Api --> App["Application layer"]
     App --> Domain["Domain layer"]
     Api --> Infra["Infrastructure layer"]
     Infra --> FakeHfu["Fake HFU adapter"]
 ```
 
-The runtime surface still exposes only `GET /health`. The frontend calls that endpoint and displays loading, healthy, and error states.
+The frontend still calls only `GET /health`. The backend also exposes Stage 7 HTTP endpoints for manual registration-flow testing through Swagger or Postman.
 
 ## Backend Layers
 
@@ -69,7 +70,7 @@ The service supports:
 
 The service validates field names and values server-side before mutating state. Invalid tool input returns structured errors and leaves the stored `RegistrationDraft` unchanged. Successful mutations run through `IConversationSessionStore.UpdateAsync`, set the session active, advance session versioning through the existing event journal, and return a state snapshot with missing required fields, fields needing clarification, fields awaiting confirmation, and `RegistrationCanBeCompleted`.
 
-Stage 4 deliberately does not expose HTTP endpoints, call OpenAI, or submit final registrations. The application-level `complete_registration` flow is implemented in Stage 6; HTTP exposure remains deferred to the backend HTTP API stage.
+Stage 4 deliberately did not expose HTTP endpoints, call OpenAI, or submit final registrations. The application-level `complete_registration` flow is implemented in Stage 6 and exposed over HTTP in Stage 7.
 
 ## Stage 5 Reference Data
 
@@ -79,7 +80,7 @@ Canonical region display names are Ukrainian. The resolver accepts Ukrainian and
 
 Resolved regions are stored in the draft as Ukrainian canonical names plus a server-owned `ReferenceId`. Ambiguous or unknown regions are persisted as `NeedsClarification` with the raw value and clarification reason; the tool result returns `RegionAmbiguous` or `RegionNotFound` so a future voice assistant can ask a focused follow-up question.
 
-Stage 5 still avoids HTTP reference data endpoints. Those belong to the backend HTTP API stage.
+Stage 7 exposes the region catalog through `GET /api/reference-data/regions`.
 
 ## Stage 6 Fake HFU Registration
 
@@ -94,7 +95,20 @@ The completion workflow:
 - marks the conversation session completed and stores `RegistrationResult`;
 - returns `RegistrationAlreadyCompleted` with the existing result and state on repeated completion attempts.
 
-`Hfu.VoiceRegistration.Infrastructure.RegistrationCompletion` provides the current fake adapter. Demo registration IDs are generated in memory as `DEMO-{year}-{counter:000000}`. This stage does not call the real HFU backend and does not expose HTTP registration endpoints.
+`Hfu.VoiceRegistration.Infrastructure.RegistrationCompletion` provides the current fake adapter. Demo registration IDs are generated in memory as `DEMO-{year}-{counter:000000}`. This stage does not call the real HFU backend.
+
+## Stage 7 Backend HTTP API
+
+`Hfu.VoiceRegistration.Api` exposes typed minimal API endpoints for conversation sessions, registration tools, fake completion, and reference data. Swagger/OpenAPI is enabled so the whole registration flow can be exercised without OpenAI or React UI.
+
+HTTP endpoints are transport adapters over application services:
+
+- session endpoints create, read, and abandon `ConversationSession` instances;
+- registration tool endpoints call the matching `IRegistrationToolService` methods;
+- `complete-registration` accepts only final consent and confirmation flags;
+- reference data endpoint returns Ukrainian region names, server-owned IDs, and aliases.
+
+Business tool failures remain application responses: the API returns `200 OK` with `RegistrationToolResult.Errors` and current state for cases like `RegistrationCannotBeCompleted`, `RegionNotFound`, or `RegistrationAlreadyCompleted`. HTTP-layer failures use Problem Details, including `404` for missing sessions and `409` for abandoning completed sessions.
 
 ## Future Voice Architecture
 
@@ -130,4 +144,4 @@ Registration logic must not depend directly on browser WebRTC. A later SIP/IP te
 
 ## Current Non-Goals
 
-The current implementation does not include OpenAI, WebRTC, SignalR, databases, Redis, HTTP registration APIs, HTTP reference data endpoints, or production HFU integration.
+The current implementation does not include OpenAI, WebRTC, SignalR, databases, Redis, React registration UI, or production HFU integration.

@@ -264,6 +264,28 @@ Confirmed Stage 6 boundary:
 - do not generate a new ID for already completed sessions;
 - do not add an artificial fake-service failure scenario.
 
+Stage 7 was separately requested and implements the backend HTTP API.
+
+## Stage 7 Scope
+
+Stage 7 implements:
+
+- typed REST endpoints for creating, reading, and abandoning conversation sessions;
+- typed REST endpoints for all backend registration tools;
+- HTTP exposure of `complete_registration` with only `personalDataConsent` and `registrationConfirmed`;
+- `GET /api/reference-data/regions`;
+- Swagger/OpenAPI for visual/manual testing;
+- Problem Details for HTTP-layer errors;
+- structured `RegistrationToolResult` payloads for business/tool errors;
+- API integration tests for session, tool, completion, reference data, Swagger, and error behavior.
+
+Confirmed Stage 7 boundary:
+
+- do not add OpenAI SDK, Realtime API, WebRTC, SignalR, EF Core, databases, Redis, React registration UI, or production HFU integration;
+- do not add a generic JSON tool dispatcher;
+- do not accept final registration DTOs from HTTP clients;
+- full registration flow should be testable through Swagger/Postman without OpenAI.
+
 ## Full Technical Specification Highlights
 
 The full spec describes:
