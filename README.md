@@ -1,6 +1,6 @@
 # Hfu.VoiceRegistration
 
-External advertising PoC for HFU voice-assisted registration. Stage 1 builds only the runnable project skeleton: .NET backend, React/Vite frontend, tests, documentation, and a health endpoint.
+External advertising PoC for HFU voice-assisted registration. The current implementation contains the Stage 1 runnable skeleton and Stage 2 pure domain model with registration completion validation.
 
 This PoC is not intended to process real personal data. Do not enter real user registration details into local demos.
 
@@ -59,6 +59,19 @@ Example response:
 }
 ```
 
+## Domain Model
+
+Stage 2 adds pure domain types and rules in `src\Hfu.VoiceRegistration.Domain`:
+
+- registration field status model;
+- supported user categories;
+- registration draft fields;
+- conversation session concept;
+- structured validation issues and result;
+- conservative completion eligibility rules.
+
+The domain model is covered by unit tests and does not depend on HTTP, OpenAI, SignalR, WebRTC, storage, or fake HFU registration.
+
 ## Frontend
 
 Install dependencies:
@@ -107,11 +120,11 @@ Stage 1 includes placeholder configuration only:
 
 No OpenAI API key is required for Stage 1.
 
-## Stage 1 Exclusions
+## Current Exclusions
 
 These are intentionally not implemented yet:
 
-- registration domain model and validation rules
+- in-memory session management
 - fake HFU registration
 - SignalR
 - OpenAI client or Realtime API
@@ -120,4 +133,4 @@ These are intentionally not implemented yet:
 - EF Core, database packages, Redis, or persistent storage
 - production HFU integration
 
-Do not move to Stage 2 without a separate request.
+Do not move to Stage 3 without a separate request.

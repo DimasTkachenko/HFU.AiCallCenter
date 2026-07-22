@@ -142,7 +142,30 @@ After Stage 1, the technical specification outlines these later stages:
 - Stage 14: developer panel.
 - Stage 15: final testing and demo polish.
 
-Do not move to Stage 2 or beyond without a separate request.
+Stage 2 was separately requested and uses the conservative completion rule approved on 2026-07-22.
+
+## Stage 2 Scope
+
+Stage 2 implements pure domain model and validation rules:
+
+- `RegistrationField<T>` and `RegistrationFieldStatus`.
+- `UserCategory`.
+- `RegistrationDraft`.
+- `ConversationSession` domain concept.
+- `RegistrationValidationResult` and validation issues.
+- Completion eligibility rules covered by unit tests.
+
+Approved conservative completion rule:
+
+- universally required fields must be filled and not `Missing`, `NeedsClarification`, or `Rejected`;
+- conditionally required fields must be filled when applicable;
+- `phoneNumber`, `dateOfBirth`, `currentRegion`, `currentCity`, and `userCategory` must be `Confirmed`;
+- `email`, when provided, must be `Confirmed`;
+- optional fields do not block completion when `Missing` or `Rejected`;
+- `InternallyDisplacedPerson` requires `regionBeforeWar` and `displacedCertificateYear`;
+- `personalDataConsent` and `registrationConfirmed` must both be `true`.
+
+Stage 2 must not add HTTP APIs, stores, OpenAI, WebRTC, SignalR, fake HFU registration, databases, Redis, or production HFU integration.
 
 ## Full Technical Specification Highlights
 

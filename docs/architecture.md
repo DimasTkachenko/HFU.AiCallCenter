@@ -4,7 +4,7 @@
 
 `Hfu.VoiceRegistration` is an external advertising PoC for HFU. It demonstrates the shape of a future voice-assisted registration system without integrating into the production HFU backend or storing real personal data.
 
-## Stage 1 Runtime
+## Current Runtime
 
 ```mermaid
 flowchart LR
@@ -14,16 +14,29 @@ flowchart LR
     Api --> Infra["Infrastructure layer"]
 ```
 
-Stage 1 exposes only `GET /health`. The frontend calls that endpoint and displays loading, healthy, and error states.
+The runtime surface still exposes only `GET /health`. The frontend calls that endpoint and displays loading, healthy, and error states.
 
 ## Backend Layers
 
-- `Hfu.VoiceRegistration.Domain`: future registration entities, value objects, and rules. It has no external dependencies.
+- `Hfu.VoiceRegistration.Domain`: registration field state, draft model, user categories, conversation session concept, and completion validation. It has no external dependencies.
 - `Hfu.VoiceRegistration.Application`: future use cases and contracts. It references Domain and exposes `AddApplication`.
 - `Hfu.VoiceRegistration.Infrastructure`: future external adapters. It references Application and exposes `AddInfrastructure`.
 - `Hfu.VoiceRegistration.Api`: ASP.NET Core host and HTTP endpoints. It references Application and Infrastructure.
 
 `Program.cs` should remain composition-focused. New service registrations should live in layer-specific extension methods.
+
+## Stage 2 Domain Boundary
+
+The domain layer now owns the registration draft shape and completion eligibility rules. It can answer whether the current draft can complete registration without knowing anything about HTTP, OpenAI, frontend state, fake HFU registration, persistence, or SignalR.
+
+Completion validation is intentionally conservative:
+
+- required fields must be filled and not rejected or waiting for clarification;
+- `phoneNumber`, `dateOfBirth`, `currentRegion`, `currentCity`, and `userCategory` must be confirmed;
+- `email`, when provided, must be confirmed;
+- optional fields may be missing or rejected;
+- internally displaced users require `regionBeforeWar` and `displacedCertificateYear`;
+- consent and final registration confirmation must be true.
 
 ## Future Voice Architecture
 
@@ -59,4 +72,4 @@ Registration logic must not depend directly on browser WebRTC. A later SIP/IP te
 
 ## Current Non-Goals
 
-Stage 1 does not include OpenAI, WebRTC, SignalR, fake HFU registration, registration business logic, databases, Redis, or production HFU integration.
+The current implementation does not include OpenAI, WebRTC, SignalR, fake HFU registration, in-memory session storage, databases, Redis, or production HFU integration.
