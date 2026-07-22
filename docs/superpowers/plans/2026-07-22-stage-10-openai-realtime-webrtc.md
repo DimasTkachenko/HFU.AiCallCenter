@@ -30,9 +30,9 @@
 - Future service: `IOpenAIRealtimeClient.CreateCallAsync(string sdpOffer, string safetyIdentifier, CancellationToken cancellationToken)`.
 - Future endpoint: `POST /api/conversation-sessions/{sessionId}/realtime/calls`.
 
-- [ ] Add failing tests for OpenAI request formatting: authorization header, `OpenAI-Safety-Identifier`, multipart `sdp`, multipart `session`, default model `gpt-realtime-2.1`, default voice `marin`.
-- [ ] Add failing endpoint tests for successful SDP answer, missing session `404`, blank SDP `400`, completed session `409`, and missing API key `500`.
-- [ ] Run `dotnet test Hfu.VoiceRegistration.sln` and verify RED.
+- [x] Add failing tests for OpenAI request formatting: authorization header, `OpenAI-Safety-Identifier`, multipart `sdp`, multipart `session`, default model `gpt-realtime-2.1`, default voice `marin`.
+- [x] Add failing endpoint tests for successful SDP answer, missing session `404`, blank SDP `400`, completed session `409`, and missing API key `500`.
+- [x] Run `dotnet test Hfu.VoiceRegistration.sln` and verify RED.
 
 ### Task 2: Backend Realtime Endpoint GREEN
 
@@ -53,12 +53,12 @@
 - Produces `IOpenAIRealtimeClient`.
 - Produces `MapOpenAIRealtimeEndpoints()`.
 
-- [ ] Implement options with safe defaults and blank-value fallback.
-- [ ] Implement `OpenAIRealtimeClient` using `HttpClient` and multipart form data.
-- [ ] Implement Problem Details helpers for realtime config/API/session status failures.
-- [ ] Implement `/api/conversation-sessions/{sessionId}/realtime/calls`.
-- [ ] Register options, typed HttpClient, and endpoint mapping in `Program.cs`.
-- [ ] Run backend tests and verify GREEN.
+- [x] Implement options with safe defaults and blank-value fallback.
+- [x] Implement `OpenAIRealtimeClient` using `HttpClient` and multipart form data.
+- [x] Implement Problem Details helpers for realtime config/API/session status failures.
+- [x] Implement `/api/conversation-sessions/{sessionId}/realtime/calls`.
+- [x] Register options, typed HttpClient, and endpoint mapping in `Program.cs`.
+- [x] Run backend tests and verify GREEN.
 
 ### Task 3: Frontend Realtime API And WebRTC Client RED
 
@@ -71,11 +71,11 @@
 - Produces `createOpenAIRealtimeWebRtcClient(options)`.
 - Produces `startOpenAIRealtimeCall(sessionId, sdpOffer, baseUrl?)`.
 
-- [ ] Add failing test that raw SDP is posted to `/api/conversation-sessions/{sessionId}/realtime/calls` with `Content-Type: application/sdp`.
-- [ ] Add failing test that WebRTC start requests microphone, creates `oai-events`, posts offer, and sets remote answer.
-- [ ] Add failing test that Realtime data channel events become transcript entries.
-- [ ] Add failing test that stop closes data channel, peer connection, and microphone tracks.
-- [ ] Run `npm.cmd test -- src/api/openAIRealtimeClient.test.ts --run` and verify RED.
+- [x] Add failing test that raw SDP is posted to `/api/conversation-sessions/{sessionId}/realtime/calls` with `Content-Type: application/sdp`.
+- [x] Add failing test that WebRTC start requests microphone, creates `oai-events`, posts offer, and sets remote answer.
+- [x] Add failing test that Realtime data channel events become transcript entries.
+- [x] Add failing test that stop closes data channel, peer connection, and microphone tracks.
+- [x] Run `npm.cmd test -- src/api/openAIRealtimeClient.test.ts --run` and verify RED.
 
 ### Task 4: Frontend Realtime API And WebRTC Client GREEN
 
@@ -86,11 +86,11 @@
 **Interfaces:**
 - Produces reusable frontend voice client for App.
 
-- [ ] Implement raw SDP HTTP client and Problem Details parsing.
-- [ ] Implement WebRTC lifecycle wrapper.
-- [ ] Implement transcript parsing for `conversation.item.input_audio_transcription.completed`, `response.audio_transcript.delta`, and `response.audio_transcript.done`.
-- [ ] Implement cleanup on stop and failed start.
-- [ ] Run frontend client tests and verify GREEN.
+- [x] Implement raw SDP HTTP client and Problem Details parsing.
+- [x] Implement WebRTC lifecycle wrapper.
+- [x] Implement transcript parsing for `conversation.item.input_audio_transcription.completed`, `response.audio_transcript.delta`, and `response.audio_transcript.done`.
+- [x] Implement cleanup on stop and failed start.
+- [x] Run frontend client tests and verify GREEN.
 
 ### Task 5: App Voice UI RED/GREEN
 
@@ -103,12 +103,12 @@
 - Consumes `createOpenAIRealtimeWebRtcClient`.
 - Produces voice panel controls and transcript display.
 
-- [ ] Add failing tests for disabled voice controls before session creation.
-- [ ] Add failing tests that starting voice creates the WebRTC client for current session and shows `голос подключён`.
-- [ ] Add failing tests that stopping voice calls `stop()` and shows stopped state.
-- [ ] Add failing tests that transcript entries render in the voice panel.
-- [ ] Implement voice state, client lifecycle, Russian UI labels, and transcript panel.
-- [ ] Run `npm.cmd test -- src/App.test.tsx --run` and verify GREEN.
+- [x] Add failing tests for disabled voice controls before session creation.
+- [x] Add failing tests that starting voice creates the WebRTC client for current session and shows `голос подключён`.
+- [x] Add failing tests that stopping voice calls `stop()` and shows stopped state.
+- [x] Add failing tests that transcript entries render in the voice panel.
+- [x] Implement voice state, client lifecycle, Russian UI labels, and transcript panel.
+- [x] Run `npm.cmd test -- src/App.test.tsx --run` and verify GREEN.
 
 ### Task 6: Documentation, Verification, Manual Smoke, Commit
 
@@ -121,11 +121,12 @@
 **Interfaces:**
 - Documents Stage 10 behavior and OpenAI config.
 
-- [ ] Update docs to mark Stage 10 implemented and Stage 11/12 deferred.
-- [ ] Run `dotnet build Hfu.VoiceRegistration.sln`.
-- [ ] Run `dotnet test Hfu.VoiceRegistration.sln`.
-- [ ] Run `npm.cmd test -- --run`.
-- [ ] Run `npm.cmd run build`.
-- [ ] Start local API and frontend. Visually verify session creation, voice panel, and safe error state when no API key is configured.
-- [ ] If an API key is configured locally, manually verify microphone permission, WebRTC connection, remote audio, and transcripts.
-- [ ] Commit with message `feat: add stage 10 openai realtime webrtc`.
+- [x] Update docs to mark Stage 10 implemented and Stage 11/12 deferred.
+- [x] Run `dotnet build Hfu.VoiceRegistration.sln`.
+- [x] Run `dotnet test Hfu.VoiceRegistration.sln`.
+- [x] Run `npm.cmd test -- --run`.
+- [x] Run `npm.cmd run build`.
+- [x] Start local API and frontend. Visually verify session creation, voice panel, and safe error state when no API key is configured.
+- [x] API key was intentionally blank for this smoke; real microphone permission, WebRTC connection, remote audio, and live transcripts remain a local manual check with `OpenAI__ApiKey` configured.
+- [x] Address review findings: interrupted-start cleanup, upstream transport `502`, SDP media type/size validation, and per-session Realtime rate limiting.
+- [x] Commit with message `feat: add stage 10 openai realtime webrtc`.

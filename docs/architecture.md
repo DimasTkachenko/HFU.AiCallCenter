@@ -133,7 +133,7 @@ The hub publishes lightweight typed `ConversationEvent` messages after existing 
 
 Stage 9 remains local and in-memory. It does not add OpenAI, WebRTC, an OpenAI tool-call bridge, Redis/backplane scale-out, persistence, auth, or production HFU integration.
 
-## Future Voice Architecture
+## Stage 10 OpenAI Realtime WebRTC
 
 ```mermaid
 flowchart LR
@@ -145,13 +145,17 @@ flowchart LR
     Api -->|SignalR events| Browser
 ```
 
-Future principle:
+Stage 10 adds the first OpenAI voice transport without connecting AI tool calls to registration state:
 
 - Backend owns conversation and registration state.
 - OpenAI owns speech-to-speech processing.
 - Browser owns WebRTC audio transport and UI display.
+- Browser sends an SDP offer to `POST /api/conversation-sessions/{sessionId}/realtime/calls`.
+- The backend uses the server-side `OpenAI:ApiKey` to call OpenAI `POST /v1/realtime/calls` and returns the SDP answer.
+- React owns microphone capture, remote audio playback, the `oai-events` data channel, voice status, diagnostics, and transcript rendering.
+- Realtime call creation validates `application/sdp`, rejects oversized SDP offers, maps OpenAI transport failures to `502`, and is rate-limited per remote address and session.
 
-The tool-call bridge should stay transport-aware but business-rule-light. Backend registration tools remain the authority for validation, draft updates, and completion eligibility.
+The tool-call bridge remains a later stage and should stay transport-aware but business-rule-light. Backend registration tools remain the authority for validation, draft updates, and completion eligibility.
 
 ## Future SIP Readiness
 
@@ -160,11 +164,12 @@ Registration logic must not depend directly on browser WebRTC. A later SIP/IP te
 ## Security Boundaries
 
 - Permanent OpenAI API keys stay only on the backend.
-- Frontend receives only short-lived Realtime connection data in later stages.
+- Frontend receives only SDP/session data needed for the Realtime WebRTC call.
+- Stage 10 Realtime calls are rate-limited, but full production abuse prevention still requires the later authentication/authorization boundary.
 - Backend must validate all field names, values, and statuses received from AI tool calls.
 - The final registration DTO must be formed by backend state, not directly by the model.
 - Real personal data must not be used in the PoC.
 
 ## Current Non-Goals
 
-The current implementation does not include OpenAI, WebRTC, the OpenAI tool-call bridge, databases, Redis/backplane scale-out, audio/transcript UI, or production HFU integration.
+The current implementation does not include the OpenAI tool-call bridge, AI-driven registration updates, the full registration system prompt, databases, Redis/backplane scale-out, SIP/IP telephony, or production HFU integration.

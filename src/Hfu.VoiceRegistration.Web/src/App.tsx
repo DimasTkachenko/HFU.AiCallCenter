@@ -16,6 +16,13 @@ import {
   createConversationRealtimeClient,
   type ConversationRealtimeClient
 } from "./api/conversationRealtimeClient";
+import { createOpenAIRealtimeWebRtcClient } from "./api/openAIRealtimeClient";
+import type {
+  OpenAIRealtimeEventLogEntry,
+  OpenAIRealtimeTranscriptEntry,
+  OpenAIRealtimeVoiceConnectionState,
+  OpenAIRealtimeWebRtcClient
+} from "./api/openAIRealtimeTypes";
 import type {
   ConversationRealtimeEvent,
   RealtimeConnectionState
@@ -144,7 +151,12 @@ export default function App() {
   const [form, setForm] = useState<FormState>(initialForm);
   const [liveState, setLiveState] = useState<RealtimeConnectionState>({ status: "idle" });
   const [liveEvents, setLiveEvents] = useState<ConversationRealtimeEvent[]>([]);
+  const [voiceState, setVoiceState] = useState<OpenAIRealtimeVoiceConnectionState>({ status: "idle" });
+  const [voiceTranscripts, setVoiceTranscripts] = useState<OpenAIRealtimeTranscriptEntry[]>([]);
+  const [voiceEvents, setVoiceEvents] = useState<OpenAIRealtimeEventLogEntry[]>([]);
   const realtimeClientRef = useRef<ConversationRealtimeClient | null>(null);
+  const voiceClientRef = useRef<OpenAIRealtimeWebRtcClient | null>(null);
+  const voiceUnsubscribersRef = useRef<Array<() => void>>([]);
   const currentSessionIdRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -186,6 +198,12 @@ export default function App() {
       realtimeClientRef.current = null;
     };
   }, [apiBaseUrl]);
+
+  useEffect(() => {
+    return () => {
+      disposeVoiceClient();
+    };
+  }, []);
 
   useEffect(() => {
     let isActive = true;
@@ -249,6 +267,14 @@ export default function App() {
   }, [registrationState]);
 
   function applySession(nextSession: ConversationSessionResponse) {
+    const previousSessionId = currentSessionIdRef.current;
+    if (previousSessionId && previousSessionId !== nextSession.sessionId) {
+      disposeVoiceClient();
+      setVoiceState({ status: "idle" });
+      setVoiceTranscripts([]);
+      setVoiceEvents([]);
+    }
+
     currentSessionIdRef.current = nextSession.sessionId;
     setSession(nextSession);
     setRegistrationState(nextSession.state);
@@ -308,6 +334,7 @@ export default function App() {
       applySession(abandoned);
       localStorage.removeItem(sessionStorageKey);
       setNotice("Сессия завершена вручную");
+      stopVoiceClient({ status: "stopped" }, true);
       await leaveLiveSession(currentSessionId);
     });
   }
@@ -344,6 +371,74 @@ export default function App() {
     } catch (error: unknown) {
       setLiveState({ status: "error", message: errorMessage(error) });
     }
+  }
+
+  async function handleStartVoice() {
+    if (!currentSessionId) {
+      return;
+    }
+
+    disposeVoiceClient();
+    setProblem(null);
+    setVoiceTranscripts([]);
+    setVoiceEvents([]);
+
+    const voiceClient = createOpenAIRealtimeWebRtcClient({
+      baseUrl: apiBaseUrl,
+      sessionId: currentSessionId
+    });
+    voiceClientRef.current = voiceClient;
+    voiceUnsubscribersRef.current = [
+      voiceClient.onStateChange(setVoiceState),
+      voiceClient.onTranscript((entry) => {
+        setVoiceTranscripts((current) => upsertTranscriptEntry(current, entry).slice(-12));
+      }),
+      voiceClient.onEvent((event) => {
+        setVoiceEvents((current) => [
+          event,
+          ...current.filter((item) => item.id !== event.id)
+        ].slice(0, 6));
+      })
+    ];
+
+    try {
+      await voiceClient.start();
+    } catch (error: unknown) {
+      disposeVoiceClient();
+      const problemDetails = toProblem(error, "Не удалось запустить голосовую связь.");
+      setProblem(problemDetails);
+      setVoiceState({
+        status: "error",
+        message: problemDetails.detail ?? problemDetails.title
+      });
+    }
+  }
+
+  function handleStopVoice() {
+    stopVoiceClient({ status: "stopped" });
+  }
+
+  function stopVoiceClient(
+    nextState: OpenAIRealtimeVoiceConnectionState,
+    clearHistory = false
+  ) {
+    disposeVoiceClient();
+    if (clearHistory) {
+      setVoiceTranscripts([]);
+      setVoiceEvents([]);
+    }
+
+    setVoiceState(nextState);
+  }
+
+  function disposeVoiceClient() {
+    for (const unsubscribe of voiceUnsubscribersRef.current) {
+      unsubscribe();
+    }
+
+    voiceUnsubscribersRef.current = [];
+    voiceClientRef.current?.stop();
+    voiceClientRef.current = null;
   }
 
   async function handleUpdateFields() {
@@ -437,6 +532,7 @@ export default function App() {
       applyToolResult(result);
       if (result.completion) {
         const completion = result.completion;
+        stopVoiceClient({ status: "stopped" });
         setSession((current) => current
           ? {
               ...current,
@@ -454,6 +550,13 @@ export default function App() {
   function updateForm<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((current) => ({ ...current, [key]: value }));
   }
+
+  const isTerminalSession = session?.status === "Completed" || session?.status === "Abandoned";
+  const isVoiceActive = voiceState.status === "requesting_microphone"
+    || voiceState.status === "connecting"
+    || voiceState.status === "connected";
+  const canStartVoice = Boolean(currentSessionId) && !isTerminalSession && !isVoiceActive;
+  const canStopVoice = isVoiceActive || voiceClientRef.current !== null;
 
   return (
     <main className="shell">
@@ -476,6 +579,15 @@ export default function App() {
             onCreateSession={handleCreateSession}
             onRefreshSession={handleRefreshSession}
             onAbandonSession={handleAbandonSession}
+          />
+          <VoicePanel
+            voiceState={voiceState}
+            transcripts={voiceTranscripts}
+            events={voiceEvents}
+            canStart={canStartVoice}
+            canStop={canStopVoice}
+            onStartVoice={handleStartVoice}
+            onStopVoice={handleStopVoice}
           />
         </section>
 
@@ -684,6 +796,90 @@ function SessionPanel({
         <button type="button" className="danger-button" onClick={onAbandonSession} disabled={!session}>
           Отменить сессию
         </button>
+      </div>
+    </section>
+  );
+}
+
+function VoicePanel({
+  voiceState,
+  transcripts,
+  events,
+  canStart,
+  canStop,
+  onStartVoice,
+  onStopVoice
+}: {
+  voiceState: OpenAIRealtimeVoiceConnectionState;
+  transcripts: OpenAIRealtimeTranscriptEntry[];
+  events: OpenAIRealtimeEventLogEntry[];
+  canStart: boolean;
+  canStop: boolean;
+  onStartVoice: () => void;
+  onStopVoice: () => void;
+}) {
+  const statusClassName = voiceState.status === "connected"
+    ? "inline-status inline-status--good"
+    : voiceState.status === "error"
+      ? "inline-status inline-status--error"
+      : "inline-status";
+
+  return (
+    <section className="panel voice-panel" aria-labelledby="voice-panel-title">
+      <div className="panel-header">
+        <h2 id="voice-panel-title">Голос</h2>
+        <span className={statusClassName}>{translateVoiceStatus(voiceState.status)}</span>
+      </div>
+
+      <div className="voice-content">
+        <div className="button-row voice-actions">
+          <button type="button" className="primary-button" onClick={onStartVoice} disabled={!canStart}>
+            Начать голос
+          </button>
+          <button type="button" onClick={onStopVoice} disabled={!canStop}>
+            Остановить
+          </button>
+        </div>
+
+        {voiceState.status === "error" && voiceState.message ? (
+          <p className="state-message state-message--error voice-message">{voiceState.message}</p>
+        ) : null}
+
+        <div className="voice-section">
+          <div className="voice-section-header">
+            <h3>Транскрипт</h3>
+            <span className="inline-status">{transcripts.length}</span>
+          </div>
+          {transcripts.length === 0 ? (
+            <p className="state-message voice-empty">Нет реплик</p>
+          ) : (
+            <ol className="transcript-list">
+              {transcripts.map((entry) => (
+                <li key={entry.id}>
+                  <strong>{entry.role === "user" ? "Клиент" : "AI"}</strong>
+                  <span>{entry.text}</span>
+                  {!entry.isFinal ? <em>черновик</em> : null}
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+
+        <div className="voice-section">
+          <div className="voice-section-header">
+            <h3>Realtime events</h3>
+            <span className="inline-status">{events.length}</span>
+          </div>
+          {events.length === 0 ? (
+            <p className="state-message voice-empty">Нет событий</p>
+          ) : (
+            <ul className="voice-event-list">
+              {events.map((event) => (
+                <li key={event.id}>{event.type}</li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
     </section>
   );
@@ -1006,6 +1202,38 @@ function translateLiveStatus(status: RealtimeConnectionState["status"]): string 
     default:
       return "live ожидание";
   }
+}
+
+function translateVoiceStatus(status: OpenAIRealtimeVoiceConnectionState["status"]): string {
+  switch (status) {
+    case "requesting_microphone":
+      return "доступ к микрофону";
+    case "connecting":
+      return "голос подключается";
+    case "connected":
+      return "голос подключён";
+    case "stopped":
+      return "голос остановлен";
+    case "error":
+      return "ошибка голоса";
+    default:
+      return "голос ожидание";
+  }
+}
+
+function upsertTranscriptEntry(
+  entries: OpenAIRealtimeTranscriptEntry[],
+  entry: OpenAIRealtimeTranscriptEntry
+): OpenAIRealtimeTranscriptEntry[] {
+  const existingIndex = entries.findIndex((current) => current.id === entry.id);
+  if (existingIndex < 0) {
+    return [...entries, entry];
+  }
+
+  const updated = [...entries];
+  updated[existingIndex] = entry;
+
+  return updated;
 }
 
 function translateFieldStatus(status: string): string {

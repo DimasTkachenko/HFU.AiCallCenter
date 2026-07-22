@@ -6,6 +6,11 @@ import type {
   ConversationRealtimeEvent,
   RealtimeConnectionState
 } from "./api/realtimeTypes";
+import type {
+  OpenAIRealtimeEventLogEntry,
+  OpenAIRealtimeTranscriptEntry,
+  OpenAIRealtimeVoiceConnectionState
+} from "./api/openAIRealtimeTypes";
 
 const sessionId = "11111111-1111-1111-1111-111111111111";
 
@@ -55,8 +60,64 @@ const realtimeClientMock = vi.hoisted(() => {
   };
 });
 
+const openAIRealtimeClientMock = vi.hoisted(() => {
+  const stateHandlers = new Set<(state: OpenAIRealtimeVoiceConnectionState) => void>();
+  const transcriptHandlers = new Set<(entry: OpenAIRealtimeTranscriptEntry) => void>();
+  const eventHandlers = new Set<(event: OpenAIRealtimeEventLogEntry) => void>();
+  const client = {
+    start: vi.fn(async () => {
+      for (const handler of stateHandlers) {
+        handler({ status: "connected" });
+      }
+    }),
+    stop: vi.fn(),
+    sendEvent: vi.fn(),
+    onStateChange: vi.fn((handler: (state: OpenAIRealtimeVoiceConnectionState) => void) => {
+      stateHandlers.add(handler);
+
+      return () => stateHandlers.delete(handler);
+    }),
+    onTranscript: vi.fn((handler: (entry: OpenAIRealtimeTranscriptEntry) => void) => {
+      transcriptHandlers.add(handler);
+
+      return () => transcriptHandlers.delete(handler);
+    }),
+    onEvent: vi.fn((handler: (event: OpenAIRealtimeEventLogEntry) => void) => {
+      eventHandlers.add(handler);
+
+      return () => eventHandlers.delete(handler);
+    })
+  };
+
+  return {
+    client,
+    createOpenAIRealtimeWebRtcClient: vi.fn(() => client),
+    emitTranscript(entry: OpenAIRealtimeTranscriptEntry) {
+      for (const handler of transcriptHandlers) {
+        handler(entry);
+      }
+    },
+    reset() {
+      stateHandlers.clear();
+      transcriptHandlers.clear();
+      eventHandlers.clear();
+      client.start.mockClear();
+      client.stop.mockClear();
+      client.sendEvent.mockClear();
+      client.onStateChange.mockClear();
+      client.onTranscript.mockClear();
+      client.onEvent.mockClear();
+      this.createOpenAIRealtimeWebRtcClient.mockClear();
+    }
+  };
+});
+
 vi.mock("./api/conversationRealtimeClient", () => ({
   createConversationRealtimeClient: realtimeClientMock.createConversationRealtimeClient
+}));
+
+vi.mock("./api/openAIRealtimeClient", () => ({
+  createOpenAIRealtimeWebRtcClient: openAIRealtimeClientMock.createOpenAIRealtimeWebRtcClient
 }));
 
 describe("App", () => {
@@ -65,6 +126,7 @@ describe("App", () => {
     localStorage.clear();
     vi.unstubAllGlobals();
     realtimeClientMock.reset();
+    openAIRealtimeClientMock.reset();
   });
 
   it("creates a session and stores it for refresh recovery", async () => {
@@ -99,6 +161,82 @@ describe("App", () => {
     expect(realtimeClientMock.client.connect).toHaveBeenCalled();
     expect(realtimeClientMock.client.joinSession).toHaveBeenCalledWith(sessionId);
     expect(await screen.findByText("live подключено")).toBeInTheDocument();
+  });
+
+  it("keeps voice controls disabled before session creation", async () => {
+    vi.stubGlobal("fetch", createFetchMock());
+
+    render(<App />);
+
+    expect(await screen.findByRole("button", { name: "Начать голос" })).toBeDisabled();
+  });
+
+  it("starts voice for the current session", async () => {
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        "POST /api/conversation-sessions": sessionResponse()
+      })
+    );
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Создать сессию" }));
+    await screen.findByText(sessionId);
+    fireEvent.click(screen.getByRole("button", { name: "Начать голос" }));
+
+    expect(openAIRealtimeClientMock.createOpenAIRealtimeWebRtcClient).toHaveBeenCalledWith(
+      expect.objectContaining({
+        baseUrl: "",
+        sessionId
+      })
+    );
+    expect(openAIRealtimeClientMock.client.start).toHaveBeenCalled();
+    expect(await screen.findByText("голос подключён")).toBeInTheDocument();
+  });
+
+  it("stops the active voice client", async () => {
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        "POST /api/conversation-sessions": sessionResponse()
+      })
+    );
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Создать сессию" }));
+    await screen.findByText(sessionId);
+    fireEvent.click(screen.getByRole("button", { name: "Начать голос" }));
+    await screen.findByText("голос подключён");
+    fireEvent.click(screen.getByRole("button", { name: "Остановить" }));
+
+    expect(openAIRealtimeClientMock.client.stop).toHaveBeenCalled();
+    expect(await screen.findByText("голос остановлен")).toBeInTheDocument();
+  });
+
+  it("renders voice transcript entries", async () => {
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        "POST /api/conversation-sessions": sessionResponse()
+      })
+    );
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Создать сессию" }));
+    await screen.findByText(sessionId);
+    fireEvent.click(screen.getByRole("button", { name: "Начать голос" }));
+    openAIRealtimeClientMock.emitTranscript({
+      id: "voice-1",
+      role: "user",
+      text: "Mene zvaty Dima",
+      isFinal: true,
+      occurredAt: "2026-07-22T12:00:00Z"
+    });
+
+    expect(await screen.findByText("Mene zvaty Dima")).toBeInTheDocument();
   });
 
   it("restores a saved session on page load", async () => {

@@ -35,12 +35,13 @@ Primary principle:
 - OpenAI owns speech-to-speech processing.
 - Browser owns WebRTC audio transport and UI display.
 
-Future flow:
+Current/future flow:
 
-- Browser connects to OpenAI Realtime API through WebRTC.
-- Backend issues safe short-lived Realtime credentials/configuration.
+- Browser creates a WebRTC offer for OpenAI Realtime.
+- Backend proxies the SDP offer to OpenAI `POST /v1/realtime/calls` with the server-side API key.
+- Browser receives only the SDP answer required to finish the WebRTC connection.
 - OpenAI Realtime model conducts the spoken conversation.
-- Tool calls are routed through the browser data channel to backend handlers.
+- Future tool calls are routed through the browser data channel to backend handlers.
 - Backend validates and updates registration state.
 - SignalR pushes live state and diagnostic updates to the frontend.
 - Fake HFU registration service returns a demo registration ID after successful validation and confirmation.
@@ -329,6 +330,29 @@ Confirmed Stage 9 boundary:
 - frontend must refresh full session state through HTTP after relevant live events;
 - do not add OpenAI SDK, Realtime API, WebRTC, microphone capture, audio playback, transcript UI, OpenAI tool-call bridge, EF Core, databases, Redis/backplane, persistent storage, auth, or production HFU integration.
 
+Stage 10 was separately requested and implements OpenAI Realtime WebRTC with the unified SDP proxy approach.
+
+## Stage 10 Scope
+
+Stage 10 implements:
+
+- server-side OpenAI Realtime options bound from `OpenAI` in `appsettings.json`, `appsettings.Development.json`, or environment variables such as `OpenAI__ApiKey`;
+- default model `gpt-realtime-2.1`, voice `marin`, and input transcription model `gpt-realtime-whisper`;
+- backend `IOpenAIRealtimeClient` using `HttpClient` and multipart form data for OpenAI `POST /v1/realtime/calls`;
+- `POST /api/conversation-sessions/{sessionId}/realtime/calls` accepting raw `application/sdp` offers and returning raw `application/sdp` answers;
+- runtime validation for SDP media type and max SDP size, transport-failure `502` mapping, and per-session Realtime call rate limiting;
+- frontend WebRTC client wrapper for microphone capture, remote audio playback, and the `oai-events` data channel;
+- React voice panel with start/stop controls, voice status, Realtime diagnostics, and transcript rendering;
+- backend integration tests and frontend Vitest coverage for request formatting, endpoint behavior, WebRTC lifecycle, transcript parsing, and voice UI.
+
+Confirmed Stage 10 boundary:
+
+- the permanent OpenAI API key exists only on the backend;
+- the React app never receives the OpenAI API key;
+- Stage 10 includes a local rate limit for Realtime call creation, but production abuse prevention still requires later auth/routing hardening;
+- the AI does not update, confirm, clear, clarify, or complete registration fields in Stage 10;
+- OpenAI tool-call bridge, full registration prompt, reconnect hardening, SIP/IP telephony, EF Core, databases, Redis/backplane, persistent storage, auth, and production HFU integration remain deferred.
+
 ## Full Technical Specification Highlights
 
 The full spec describes:
@@ -372,7 +396,7 @@ Refer to the extracted text files in `context/` for the complete document text.
 ## Security And Data Rules
 
 - Permanent OpenAI API key must exist only on backend.
-- Frontend receives only short-lived data required for Realtime connection.
+- Frontend receives only Realtime connection data required to complete the WebRTC handshake.
 - Backend must not trust field names, values, types, or statuses from the model without validation.
 - README must say the PoC is not intended to process real personal data.
 - Do not log the full final registration DTO in production-style logs.

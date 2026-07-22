@@ -1,6 +1,6 @@
 # Hfu.VoiceRegistration
 
-External advertising PoC for HFU voice-assisted registration. The current implementation contains the Stage 1 runnable skeleton, Stage 2 pure domain model, Stage 3 in-memory conversation session management, Stage 4 application-level backend registration tools, Stage 5 reference data for region matching, Stage 6 fake HFU registration completion, Stage 7 backend HTTP API, Stage 8 React UI without voice, and Stage 9 SignalR live updates.
+External advertising PoC for HFU voice-assisted registration. The current implementation contains the Stage 1 runnable skeleton, Stage 2 pure domain model, Stage 3 in-memory conversation session management, Stage 4 application-level backend registration tools, Stage 5 reference data for region matching, Stage 6 fake HFU registration completion, Stage 7 backend HTTP API, Stage 8 React UI without voice, Stage 9 SignalR live updates, and Stage 10 OpenAI Realtime WebRTC voice transport.
 
 This PoC is not intended to process real personal data. Do not enter real user registration details into local demos.
 
@@ -186,6 +186,15 @@ Stage 9 realtime capabilities:
 - displays compact live connection status and recent backend events;
 - refreshes full session state through HTTP after live events, keeping HTTP/backend state authoritative.
 
+Stage 10 voice capabilities:
+
+- adds `POST /api/conversation-sessions/{sessionId}/realtime/calls` for browser SDP offers;
+- keeps the permanent OpenAI API key on the backend and calls `POST /v1/realtime/calls` with `HttpClient`;
+- creates a browser WebRTC connection with microphone capture, remote audio playback, and an `oai-events` data channel;
+- displays voice connection state, compact OpenAI Realtime diagnostics, and transcript entries from known Realtime events.
+
+Stage 10 does not let the AI update registration fields. The registration tool-call bridge and full voice registration prompt remain deferred to later stages.
+
 For manual UI testing, run the API first, then run the frontend and open `http://127.0.0.1:5173`.
 
 Build and test:
@@ -197,13 +206,19 @@ npm.cmd test -- --run
 
 ## Configuration
 
-Current local configuration contains OpenAI placeholders and session timeout settings:
+Current local configuration contains OpenAI Realtime settings and session timeout settings:
 
 ```json
 {
   "OpenAI": {
     "ApiKey": "",
-    "RealtimeModel": ""
+    "BaseUrl": "https://api.openai.com/v1",
+    "RealtimeModel": "gpt-realtime-2.1",
+    "RealtimeVoice": "marin",
+    "RealtimeInputTranscriptionModel": "gpt-realtime-whisper",
+    "RealtimeMaxSdpOfferCharacters": 131072,
+    "RealtimeCallsPerMinute": 12,
+    "RealtimeInstructions": "You are a helpful HFU voice registration assistant demo. Keep responses brief. Registration tools are not connected yet, so do not say you saved, submitted, or completed a registration."
   },
   "Frontend": {
     "BaseUrl": "http://localhost:5173"
@@ -216,14 +231,15 @@ Current local configuration contains OpenAI placeholders and session timeout set
 }
 ```
 
-No OpenAI API key is required yet.
+For local voice testing, set `OpenAI:ApiKey` in `appsettings.Development.json` or provide `OpenAI__ApiKey` as an environment variable. Do not put the API key in the React app or frontend environment variables. The Realtime call endpoint is rate-limited per remote address and session; tune it with `OpenAI__RealtimeCallsPerMinute`.
 
 ## Current Exclusions
 
 These are intentionally not implemented yet:
 
-- OpenAI client or Realtime API
-- WebRTC, microphone capture, audio playback, or transcript UI
 - OpenAI tool-call bridge
+- AI-driven registration field updates or completion through voice
+- full registration system prompt
+- SIP/IP telephony transport
 - EF Core, database packages, Redis/backplane, or persistent storage
 - production HFU integration

@@ -129,7 +129,7 @@ h3 {
 }
 
 .top-grid {
-  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.4fr);
+  grid-template-columns: minmax(280px, 0.85fr) minmax(340px, 1.2fr) minmax(320px, 1fr);
 }
 
 .layout-grid {
@@ -190,6 +190,12 @@ h3 {
 }
 
 .status-pill--error {
+  border-color: #e4a2a2;
+  background: #fff0f0;
+  color: #a23939;
+}
+
+.inline-status--error {
   border-color: #e4a2a2;
   background: #fff0f0;
   color: #a23939;
@@ -300,6 +306,79 @@ dd {
 
 .action-stack button {
   flex: 1 1 180px;
+}
+
+.voice-content {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.voice-actions {
+  padding: 0;
+}
+
+.voice-actions button {
+  flex: 1 1 140px;
+}
+
+.voice-message,
+.voice-empty {
+  padding: 0;
+}
+
+.voice-section {
+  display: grid;
+  gap: 8px;
+}
+
+.voice-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.transcript-list,
+.voice-event-list {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.transcript-list li {
+  display: grid;
+  grid-template-columns: 68px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: start;
+  padding: 9px 0;
+  border-top: 1px solid #edf0f4;
+}
+
+.transcript-list strong,
+.transcript-list em,
+.voice-event-list li {
+  color: #267f86;
+  font-size: 0.78rem;
+  font-style: normal;
+  font-weight: 850;
+}
+
+.transcript-list span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #364254;
+  font-size: 0.88rem;
+  line-height: 1.35;
+}
+
+.voice-event-list li {
+  padding: 7px 0;
+  border-top: 1px solid #edf0f4;
+  overflow-wrap: anywhere;
+  color: #556272;
 }
 
 .primary-button {
