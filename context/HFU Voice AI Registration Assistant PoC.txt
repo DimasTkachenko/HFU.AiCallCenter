@@ -1,0 +1,375 @@
+Мы начинаем новый проект HFU Voice AI Registration Assistant PoC.
+На этом шаге необходимо выполнить только Этап 1: создать каркас solution и базовых проектов. Не реализуй регистрационную бизнес-логику, OpenAI Realtime API, WebRTC, SignalR hub, AI tools или fake HFU registration.
+
+# Контекст проекта
+
+Это браузерный proof of concept голосового AI-ассистента для первичной регистрации пользователей HFU.
+Будущая архитектура:
+React + TypeScript frontend
+        │
+        ├── WebRTC → OpenAI Realtime API
+        │
+        ├── HTTP → ASP.NET Core Web API
+        │
+        └── SignalR → ASP.NET Core backend
+
+ASP.NET Core backend
+        ├── conversation session management
+        ├── registration state
+        ├── validation
+        ├── AI tool handlers
+        ├── reference data
+        └── fake HFU registration
+Главный архитектурный принцип:
+Browser owns audio transport.
+Backend owns conversation and registration state.
+OpenAI owns speech-to-speech processing.
+На текущем этапе создаётся только технический фундамент.
+
+# Перед началом
+
+Изучи текущее содержимое рабочей директории.
+Проверь, является ли директория git-репозиторием.
+Проверь установленные версии:
+.NET SDK;
+Node.js;
+npm.
+Если в директории уже есть файлы, не удаляй и не перезаписывай их без необходимости.
+Кратко сообщи план создания каркаса.
+Используй актуальную установленную стабильную/LTS-версию .NET, если репозиторий не задаёт другую версию.
+Используй React + TypeScript + Vite для frontend.
+Не задавай уточняющие вопросы, если окружение позволяет принять разумное решение самостоятельно. Зафиксируй такие решения в итоговом отчёте.
+
+# Требуемая структура
+
+Создай solution со следующим логическим разделением:
+Hfu.VoiceRegistration/
+├── Hfu.VoiceRegistration.sln
+├── Directory.Build.props
+├── .editorconfig
+├── .gitignore
+├── README.md
+├── docs/
+│   └── architecture.md
+├── src/
+│   ├── Hfu.VoiceRegistration.Api/
+│   ├── Hfu.VoiceRegistration.Domain/
+│   ├── Hfu.VoiceRegistration.Application/
+│   ├── Hfu.VoiceRegistration.Infrastructure/
+│   └── Hfu.VoiceRegistration.Web/
+└── tests/
+    ├── Hfu.VoiceRegistration.Domain.Tests/
+    ├── Hfu.VoiceRegistration.Application.Tests/
+    └── Hfu.VoiceRegistration.Api.IntegrationTests/
+Frontend Hfu.VoiceRegistration.Web является React/Vite-приложением, а не .NET-проектом.
+Если современный формат .slnx лучше поддерживается установленным SDK и инструментами, всё равно создай обычный .sln, если нет веской причины использовать другой формат. Цель — максимальная совместимость с Rider, Visual Studio и CLI.
+
+# Backend-проекты
+
+
+# Hfu.VoiceRegistration.Domain
+
+Тип:
+.NET class library.
+Назначение в будущих этапах:
+domain models;
+enums;
+registration field state;
+conversation session concepts;
+domain validation rules that do not depend on infrastructure.
+На этом этапе не добавляй будущие domain entities. Оставь проект минимальным, но рабочим.
+Зависимости:
+не должен ссылаться на другие проекты solution;
+не добавлять сторонние NuGet packages без необходимости.
+
+# Hfu.VoiceRegistration.Application
+
+Тип:
+.NET class library.
+Будущее назначение:
+use cases;
+application services;
+interfaces;
+AI tool handlers;
+DTO mapping;
+completion workflow.
+Project references:
+Application → Domain
+Не реализуй будущие use cases на этом этапе.
+
+# Hfu.VoiceRegistration.Infrastructure
+
+Тип:
+.NET class library.
+Будущее назначение:
+in-memory session store;
+OpenAI integration;
+reference data providers;
+fake HFU adapter;
+technical services.
+Project references:
+Infrastructure → Application
+Infrastructure → Domain
+Не добавляй EF Core, database packages, Redis packages или OpenAI packages на этом этапе.
+
+# Hfu.VoiceRegistration.Api
+
+Тип:
+ASP.NET Core Web API.
+Project references:
+Api → Application
+Api → Infrastructure
+Domain должен быть доступен API только транзитивно либо через Application contracts. Не добавляй прямую ссылку Api → Domain, если она не требуется для компиляции текущего минимального каркаса.
+API должен содержать:
+controllers или minimal API endpoints — выбери один последовательный подход;
+endpoint GET /health;
+Swagger/OpenAPI в development;
+корректную dependency injection registration structure;
+CORS configuration для локального frontend;
+configuration placeholders для будущей OpenAI секции без реального ключа;
+стандартный JSON setup;
+HTTPS development support.
+Предпочтительно использовать controllers, поскольку позднее появится несколько групп API и строгие DTO. Однако не создавай пустые контроллеры для будущих функций.
+Ответ GET /health должен быть простым и пригодным для frontend, например:
+{
+  "status": "Healthy",
+  "service": "Hfu.VoiceRegistration.Api"
+}
+Не добавляй authentication и authorization на этом этапе.
+
+# Dependency injection structure
+
+Создай extension methods для регистрации слоёв, чтобы Program.cs не стал местом накопления всех будущих зависимостей.
+Например:
+services.AddApplication();
+services.AddInfrastructure(configuration);
+На текущем этапе методы могут регистрировать только минимально необходимые зависимости или быть пустыми осмысленными точками расширения.
+Избегай создания абстракций только ради абстракций.
+
+# Backend tests
+
+
+# Hfu.VoiceRegistration.Domain.Tests
+
+xUnit;
+reference на Domain;
+один минимальный smoke test, подтверждающий работу test project.
+
+# Hfu.VoiceRegistration.Application.Tests
+
+xUnit;
+reference на Application;
+при необходимости reference на Domain;
+один минимальный smoke test.
+
+# Hfu.VoiceRegistration.Api.IntegrationTests
+
+xUnit;
+Microsoft.AspNetCore.Mvc.Testing;
+reference на API;
+integration test для GET /health.
+Тест должен запускать API через WebApplicationFactory и проверять:
+HTTP 200;
+ожидаемое значение status;
+ожидаемое имя сервиса.
+Если для WebApplicationFactory требуется сделать Program доступным тестовому проекту, реализуй стандартный безопасный подход.
+
+# Frontend
+
+Создай React + TypeScript + Vite application:
+src/Hfu.VoiceRegistration.Web
+Требования:
+TypeScript strict mode;
+функциональные React-компоненты;
+без Redux;
+без тяжёлого UI framework;
+без OpenAI SDK;
+без WebRTC;
+без SignalR на текущем этапе;
+без fake registration form.
+Главная страница должна:
+показывать заголовок HFU Voice Registration Demo;
+кратко сообщать, что это voice AI registration proof of concept;
+отображать статус backend;
+при загрузке вызывать GET /health;
+показывать состояния:
+checking;
+healthy;
+unavailable;
+содержать базовую визуальную структуру будущего приложения:
+header;
+placeholder conversation panel;
+placeholder registration panel;
+placeholder developer panel;
+быть аккуратной и адаптивной, но без сложного дизайна.
+Создай небольшой типизированный API client для health endpoint.
+URL backend должен задаваться через environment variable, например:
+VITE_API_BASE_URL
+Добавь:
+.env.example
+Не добавляй настоящий секрет.
+
+# Конфигурация
+
+Backend должен использовать стандартную configuration model.
+Добавь секцию без секретов:
+{
+  "OpenAI": {
+    "ApiKey": "",
+    "RealtimeModel": ""
+  }
+}
+В README явно укажи:
+API key пока не нужен для Этапа 1;
+позднее ключ должен передаваться через user secrets или environment variables;
+ключ никогда не должен попадать во frontend.
+Добавь development CORS origin через configuration, например:
+{
+  "Frontend": {
+    "AllowedOrigins": [
+      "http://localhost:5173"
+    ]
+  }
+}
+Не хардкодь CORS policy по всему приложению.
+
+# Общие настройки .NET
+
+Создай Directory.Build.props с разумными общими настройками:
+nullable enabled;
+implicit usings enabled;
+warnings не отключать;
+deterministic build;
+единая language version, соответствующая SDK;
+warnings as errors не включать глобально, если это создаёт проблемы с generated code или templates.
+Не добавляй чрезмерно строгие анализаторы на первом этапе.
+Создай .editorconfig с базовыми правилами форматирования C# и TypeScript/JavaScript.
+
+# README
+
+README должен содержать:
+Назначение проекта.
+Статус: PoC, не production.
+Структуру solution.
+Prerequisites.
+Команды restore/build/test backend.
+Команды install/run/build frontend.
+Как одновременно запустить backend и frontend.
+URL Swagger.
+URL health endpoint.
+Переменные окружения frontend.
+Предупреждение не использовать реальные персональные данные.
+Указание, что OpenAI integration появится в следующих этапах.
+Раздел Next implementation stages с кратким перечнем:
+domain model;
+session storage;
+registration tools;
+fake HFU registration;
+React registration UI;
+SignalR;
+Realtime WebRTC;
+tool-call bridge.
+
+# Architecture document
+
+Создай docs/architecture.md.
+Он должен кратко фиксировать:
+назначение PoC;
+разделение frontend/backend/OpenAI;
+выбранные проекты solution;
+направление project references;
+правило, что backend является единственным источником истины;
+отсутствие базы данных в первой версии;
+будущую возможность заменить WebRTC transport на SIP transport;
+список архитектурных запретов:
+API key во frontend;
+registration state как источник истины во frontend;
+database на текущем этапе;
+production HFU integration на текущем этапе.
+Не описывай ещё не реализованные классы как уже существующие.
+
+# Gitignore
+
+Убедись, что исключены:
+.NET build outputs;
+Node modules;
+Vite outputs;
+IDE files;
+.env;
+локальные secrets;
+coverage outputs;
+logs.
+.env.example должен остаться в git.
+
+# Не делать на этом этапе
+
+Не реализовывай:
+RegistrationDraft;
+RegistrationField;
+conversation sessions;
+in-memory store;
+validation rules;
+region resolver;
+fake registration;
+SignalR hub;
+OpenAI client;
+Realtime API;
+WebRTC;
+tools;
+system prompt;
+sessionStorage recovery;
+registration form;
+manual tool-call emulator;
+полноценную developer panel;
+Docker;
+CI/CD;
+authentication;
+database.
+Не устанавливай пакеты для будущих этапов «на всякий случай».
+
+# Проверка результата
+
+После реализации обязательно выполни команды, соответствующие реальному SDK и структуре проекта.
+Минимально:
+dotnet restore
+dotnet build
+dotnet test
+Для frontend:
+npm install
+npm run build
+Также запусти backend и проверь GET /health.
+Если возможно в текущем окружении, запусти frontend и проверь, что он получает healthy response от backend.
+Не утверждай, что проверка выполнена, если команда фактически не запускалась.
+
+# Критерии готовности Этапа 1
+
+Этап готов, если:
+solution создан;
+все .NET-проекты входят в solution;
+project references соответствуют требованиям;
+backend собирается;
+frontend собирается;
+все tests проходят;
+integration test health endpoint проходит;
+Swagger доступен в development;
+frontend отображает состояние backend;
+API key отсутствует во frontend;
+README содержит команды запуска;
+docs/architecture.md создан;
+в репозитории отсутствуют реальные secrets;
+будущая бизнес-логика не реализована преждевременно.
+
+# Итоговый отчёт
+
+После завершения предоставь:
+Краткое резюме выполненного.
+Дерево созданных проектов и ключевых файлов.
+Принятые локальные технические решения.
+Список установленных NuGet и npm dependencies.
+Все выполненные команды проверки.
+Фактический результат каждой команды.
+Список warnings, если они остались.
+Инструкцию запуска backend.
+Инструкцию запуска frontend.
+Чёткое указание, что намеренно оставлено для Этапа 2.
+Не переходи к Этапу 2 без отдельного запроса.

@@ -1,0 +1,1098 @@
+
+# HFU Voice AI Registration Assistant — Technical Specification
+
+
+# 1. Название проекта
+
+HFU Voice AI Registration Assistant PoC
+Рабочее название solution:
+Hfu.VoiceRegistration
+
+# 2. Контекст
+
+HFU требуется продемонстрировать возможность проведения первичной регистрации пользователя при помощи голосового AI-ассистента без участия оператора.
+Основная целевая аудитория демонстрации — пожилые люди, внутренне перемещённые лица и другие пользователи, которым может быть сложно самостоятельно заполнить обычную веб-форму.
+AI-ассистент должен вести естественный разговор, задавать вопросы, понимать ответы пользователя, исправлять ошибки, подтверждать критически важные сведения и завершать регистрацию в рамках одного разговора.
+Проект является рекламным proof of concept. Он не интегрируется с production-системой HFU и не сохраняет реальные персональные данные в постоянной базе данных.
+
+# 3. Цель PoC
+
+Создать браузерное приложение, в котором пользователь может:
+Начать голосовой разговор с AI-ассистентом.
+Пройти полную первичную регистрацию.
+Отвечать естественными фразами, в том числе сообщать несколько сведений в одной реплике.
+Исправлять ранее сообщённые сведения.
+Получать уточняющие вопросы при неоднозначном распознавании.
+Услышать итоговое резюме собранных данных.
+Голосом подтвердить регистрацию.
+Получить сообщение об успешной демонстрационной регистрации.
+Одновременно в интерфейсе должны отображаться:
+текущий статус голосовой сессии;
+транскрипция разговора;
+состояние регистрационной анкеты;
+сведения, которые отсутствуют или требуют уточнения;
+диагностические события;
+финальный JSON регистрации.
+
+# 4. Главный приоритет
+
+Приоритеты проекта:
+Голосовой разговор с AI через OpenAI Realtime API.
+Надёжное накопление и подтверждение регистрационных данных.
+Демонстрационный модуль регистрации, имитирующий HFU.
+Fake HFU Registration не является полноценной бизнес-системой и не должен усложнять PoC.
+
+# 5. Scope
+
+В PoC входят:
+React + TypeScript frontend;
+ASP.NET Core Web API backend;
+OpenAI Realtime API;
+браузерный WebRTC-аудиоканал;
+управляемая AI-модель;
+backend-managed registration state;
+backend tools для изменения регистрационной анкеты;
+in-memory хранение сессий;
+SignalR для обновления UI и диагностических событий;
+справочник регионов;
+серверное сопоставление названий регионов;
+fake HFU registration service;
+восстановление незавершённой анкеты после обновления страницы;
+developer/debug panel;
+автоматические и интеграционные тесты критической backend-логики;
+документация локального запуска.
+
+# 6. Out of scope
+
+В первую версию не входят:
+production-интеграция с HFU;
+PostgreSQL, Redis или другая постоянная база данных;
+реальная аутентификация пользователей;
+реальная авторизация сотрудников;
+отправка SMS;
+подтверждение номера телефона через SMS;
+подтверждение email;
+загрузка документов;
+распознавание документов;
+сохранение аудиозаписей;
+полноценная IP-телефония;
+SIP-провайдер;
+исходящие звонки;
+production monitoring;
+горизонтальное масштабирование;
+длительное хранение разговоров;
+отдельная административная панель;
+полноценная система поиска дубликатов;
+юридически значимая электронная подпись.
+Архитектура должна позволять в будущем заменить браузерный WebRTC transport на SIP/IP telephony transport без переписывания регистрационной логики.
+
+# 7. Технологический стек
+
+
+# Frontend
+
+React;
+TypeScript;
+Vite;
+стандартный WebRTC API браузера;
+SignalR JavaScript client;
+обычный HTTP client на базе fetch или небольшой типизированной обёртки;
+CSS Modules, обычный CSS или другая минимальная система стилей без тяжёлого UI-фреймворка.
+Не добавлять Redux, MobX и другие крупные state-management библиотеки без фактической необходимости.
+
+# Backend
+
+ASP.NET Core Web API;
+современная поддерживаемая версия .NET, совместимая с окружением разработки;
+SignalR;
+встроенный dependency injection;
+System.Text.Json;
+BackgroundService для очистки устаревших in-memory сессий;
+Swagger/OpenAPI в development-режиме;
+xUnit для тестов.
+
+# AI
+
+OpenAI Realtime API;
+WebRTC для браузерной аудиосессии;
+function/tool calling;
+backend-issued short-lived Realtime session credentials или другой рекомендованный безопасный серверный механизм;
+постоянный OpenAI API key хранится только на backend.
+
+# 8. Архитектурные принципы
+
+Главный принцип:
+Browser owns audio transport.
+Backend owns conversation and registration state.
+OpenAI owns speech-to-speech processing.
+React frontend отвечает за:
+доступ к микрофону;
+воспроизведение голоса AI;
+установление WebRTC-соединения;
+пользовательские кнопки;
+отображение транскрипции;
+отображение состояния анкеты;
+отображение диагностических событий;
+восстановление sessionId из sessionStorage;
+передачу Realtime tool calls в backend;
+передачу результата backend tool call обратно в Realtime session.
+ASP.NET Core backend отвечает за:
+создание разговорных сессий;
+хранение единственного достоверного состояния анкеты;
+выдачу безопасных данных для подключения к Realtime API;
+регистрацию доступных AI tools;
+валидацию tool calls;
+нормализацию значений;
+сопоставление регионов;
+правила обязательности полей;
+правила подтверждения полей;
+определение возможности завершить регистрацию;
+fake HFU registration;
+журнал событий;
+SignalR notifications;
+очистку устаревших сессий.
+OpenAI-модель отвечает за:
+естественное ведение разговора;
+формулировку вопросов;
+понимание ответов;
+выбор следующего вопроса с учётом серверного состояния;
+вызов backend tools;
+повторение неясных данных;
+отдельное подтверждение критичных полей;
+итоговое голосовое резюме;
+сообщение результата регистрации.
+Модель не является владельцем анкеты и не может самостоятельно объявить регистрацию завершённой без успешного ответа backend.
+
+# 9. Управление сценарием разговора
+
+Используется управляемая модель:
+Модель управляет естественным разговором. Backend управляет состоянием и правилами завершения.
+Модель может:
+изменять порядок вопросов;
+учитывать уже сообщённые сведения;
+сохранять несколько полей из одной реплики;
+возвращаться к ранее заполненному полю;
+адаптировать лексику к пользователю;
+поддерживать русский и украинский языки;
+понимать смешанную русско-украинскую речь;
+вежливо возвращать пользователя к регистрации после отклонения от темы.
+Backend определяет:
+какие поля обязательны;
+какие поля применимы к выбранной категории;
+какие поля отсутствуют;
+какие поля требуют уточнения;
+какие поля требуют подтверждения;
+может ли регистрация быть завершена.
+
+# 10. Регистрационные поля
+
+Каждый пользователь относится ровно к одной категории.
+
+# Обязательные для всех пользователей
+
+firstName — имя;
+lastName — фамилия;
+dateOfBirth — дата рождения;
+phoneNumber — номер телефона;
+currentRegion — текущий регион;
+currentCity — текущий населённый пункт;
+userCategory — категория пользователя;
+personalDataConsent — согласие на обработку персональных данных;
+registrationConfirmed — итоговое голосовое подтверждение регистрации.
+
+# Необязательные
+
+patronymic — отчество;
+email — email;
+actualAddress — фактический адрес свободной строкой.
+Отказ пользователя сообщить необязательное поле не должен блокировать регистрацию.
+
+# Условно обязательные
+
+Для категории InternallyDisplacedPerson обязательны:
+regionBeforeWar — регион проживания до войны;
+displacedCertificateYear — год получения справки ВПЛ.
+Для остальных категорий эти поля неприменимы и не должны блокировать регистрацию.
+
+# 11. Категории пользователей
+
+На первом этапе поддерживаются категории:
+InternallyDisplacedPerson;
+HasManyChildren;
+DisabledPerson;
+MilitaryPerson;
+MilitaryPersonRelative;
+Other.
+Модель должна озвучивать категории понятными пользователю словами.
+Модель не должна выбирать категорию исключительно по косвенным признакам. Категория должна быть явно названа или подтверждена пользователем.
+
+# 12. Фактический адрес
+
+Адрес хранится как свободная строка:
+actualAddress: string
+Структурный разбор улицы, дома, корпуса и квартиры не требуется.
+Регион и населённый пункт хранятся отдельными полями:
+currentRegion;
+currentCity.
+Причина такого решения: переселенец может временно проживать по адресу, структуру которого понимает неточно. Для текущего PoC важны регион и населённый пункт, а полный адрес используется только как дополнительная информация.
+
+# 13. Унифицированное состояние полей
+
+Все регистрационные поля используют одинаковую модель состояния.
+Состояния:
+public enum RegistrationFieldStatus
+{
+    Missing,
+    Captured,
+    NeedsClarification,
+    Confirmed,
+    Rejected
+}
+Смысл состояний:
+Missing — значение ещё не получено;
+Captured — значение получено, но ещё не подтверждено;
+NeedsClarification — значение неоднозначно, некорректно или требует повторного вопроса;
+Confirmed — пользователь явно подтвердил значение;
+Rejected — пользователь явно отказался сообщить поле.
+Rejected допустим для необязательного поля.
+Для обязательного поля статус Rejected не позволяет завершить регистрацию.
+Базовая модель:
+public sealed class RegistrationField<T>
+{
+    public T? Value { get; set; }
+
+    public string? RawValue { get; set; }
+
+    public RegistrationFieldStatus Status { get; set; }
+}
+На первом этапе не добавлять разные специализированные состояния или confidence score для отдельных полей.
+
+# 14. Регистрационный черновик
+
+Концептуальная структура:
+public sealed class RegistrationDraft
+{
+    public RegistrationField<string> FirstName { get; set; }
+    public RegistrationField<string> LastName { get; set; }
+    public RegistrationField<string> Patronymic { get; set; }
+
+    public RegistrationField<DateOnly?> DateOfBirth { get; set; }
+
+    public RegistrationField<string> PhoneNumber { get; set; }
+    public RegistrationField<string> Email { get; set; }
+
+    public RegistrationField<string> CurrentRegion { get; set; }
+    public RegistrationField<string> CurrentCity { get; set; }
+    public RegistrationField<string> ActualAddress { get; set; }
+
+    public RegistrationField<UserCategory?> UserCategory { get; set; }
+
+    public RegistrationField<string> RegionBeforeWar { get; set; }
+    public RegistrationField<int?> DisplacedCertificateYear { get; set; }
+
+    public bool PersonalDataConsent { get; set; }
+    public bool RegistrationConfirmed { get; set; }
+}
+Внутренняя backend-модель может дополнительно хранить идентификаторы разрешённых справочных значений, но модель и frontend работают прежде всего с понятными названиями.
+
+# 15. Нормализация регионов
+
+AI tool передаёт название региона обычным текстом.
+Например:
+Харьковская область
+Backend должен:
+Нормализовать регистр и пробелы.
+Поддерживать русские и украинские варианты названий.
+Искать соответствие во внутреннем справочнике.
+Сохранять каноническое название и внутренний идентификатор, если он используется.
+Возвращать NeedsClarification, если соответствие не найдено или неоднозначно.
+При необходимости возвращать список возможных значений.
+AI не должен генерировать идентификаторы регионов.
+Отдельный tool resolve_region в первой версии не нужен. Сопоставление выполняется при обработке update_registration_fields.
+
+# 16. Какие поля подтверждаются отдельно
+
+Сразу и отдельно подтверждаются:
+номер телефона;
+email;
+дата рождения, если она была распознана неоднозначно;
+регион, населённый пункт или адрес, если backend сообщил о необходимости уточнения;
+любое исправленное пользователем значение.
+Остальные сведения можно подтвердить общей итоговой сводкой.
+Не следует подтверждать каждое простое поле сразу после каждого ответа, поскольку это делает разговор медленным и раздражающим.
+
+# 17. Backend tools
+
+Модель использует небольшие backend tools.
+
+# 17.1 update_registration_fields
+
+Назначение:
+сохранить одно или несколько полей из реплики пользователя;
+выполнить серверную нормализацию;
+выполнить серверную валидацию;
+вернуть актуальное состояние анкеты.
+Пример аргументов:
+{
+  "fields": [
+    {
+      "name": "lastName",
+      "value": "Петренко",
+      "rawValue": "Петренко",
+      "status": "Captured"
+    },
+    {
+      "name": "firstName",
+      "value": "Ганна",
+      "rawValue": "Ганна",
+      "status": "Captured"
+    },
+    {
+      "name": "dateOfBirth",
+      "value": "1952-05-23",
+      "rawValue": "двадцять третього травня п'ятдесят другого",
+      "status": "Captured"
+    }
+  ]
+}
+Backend не должен доверять переданным типам, статусам или значениям без проверки.
+
+# 17.2 confirm_registration_fields
+
+Назначение:
+перевести перечисленные поля в Confirmed после явного подтверждения пользователем.
+Пример:
+{
+  "fieldNames": [
+    "phoneNumber"
+  ]
+}
+Модель не должна подтверждать поле только потому, что считает распознавание уверенным.
+
+# 17.3 mark_fields_for_clarification
+
+Назначение:
+перевести одно или несколько полей в NeedsClarification.
+Пример:
+{
+  "fieldNames": [
+    "phoneNumber"
+  ],
+  "reason": "Не удалось однозначно распознать последние две цифры"
+}
+
+# 17.4 clear_registration_fields
+
+Назначение:
+удалить ошибочное значение;
+вернуть поле в Missing.
+Пример:
+{
+  "fieldNames": [
+    "actualAddress"
+  ]
+}
+
+# 17.5 get_registration_state
+
+Назначение:
+получить единственное актуальное серверное состояние анкеты;
+восстановить контекст после ошибки или переподключения;
+подготовить итоговую сводку.
+Ожидаемый ответ содержит:
+{
+  "sessionId": "...",
+  "version": 5,
+  "fields": {},
+  "missingRequiredFields": [],
+  "fieldsRequiringClarification": [],
+  "fieldsAwaitingConfirmation": [],
+  "registrationCanBeCompleted": false
+}
+
+# 17.6 complete_registration
+
+Назначение:
+завершить регистрацию после согласия на обработку данных и итогового голосового подтверждения.
+Пример:
+{
+  "personalDataConsent": true,
+  "registrationConfirmed": true
+}
+Backend должен повторно проверить всю анкету.
+Модель не передаёт финальный DTO напрямую в fake HFU service. Финальный DTO формируется backend из текущего RegistrationDraft.
+
+# 18. Правила завершения регистрации
+
+Регистрация может быть завершена только если:
+все обязательные поля заполнены;
+все применимые условно обязательные поля заполнены;
+нет обязательных полей в состоянии Missing;
+нет обязательных полей в состоянии NeedsClarification;
+критически важные сведения подтверждены по правилам;
+пользователь дал согласие на обработку персональных данных;
+пользователь явно подтвердил итоговую регистрацию.
+Перед вызовом complete_registration модель должна:
+Получить актуальное состояние анкеты.
+Озвучить краткое итоговое резюме.
+Предложить пользователю исправить ошибки.
+Получить явное согласие на регистрацию.
+Backend остаётся финальным арбитром.
+
+# 19. Fake HFU Registration
+
+Fake HFU service:
+принимает финальный серверный DTO;
+выполняет последнюю проверку;
+не использует базу данных;
+имитирует успешную регистрацию;
+генерирует демонстрационный номер.
+Пример:
+{
+  "success": true,
+  "registrationId": "DEMO-2026-000042",
+  "message": "Registration completed"
+}
+Регистрационный номер может генерироваться в памяти. Его уникальность требуется только в рамках текущего процесса приложения.
+После успешного ответа:
+статус разговорной сессии становится Completed;
+результат сохраняется в сессии;
+SignalR отправляет обновление frontend;
+модель сообщает пользователю об успешной регистрации;
+UI показывает финальный DTO и registration ID.
+
+# 20. Состояния разговорной сессии
+
+public enum ConversationSessionStatus
+{
+    Created,
+    Connecting,
+    Active,
+    Completing,
+    Completed,
+    Failed,
+    Abandoned
+}
+Смысл:
+Created — backend создал сессию;
+Connecting — устанавливается Realtime/WebRTC-соединение;
+Active — разговор идёт;
+Completing — backend завершает регистрацию;
+Completed — fake-регистрация успешна;
+Failed — необрабатываемая ошибка;
+Abandoned — пользователь прекратил разговор либо сессия устарела.
+
+# 21. ConversationSession
+
+Концептуальная модель:
+ConversationSession
+├── SessionId
+├── Status
+├── RegistrationDraft
+├── Version
+├── CreatedAt
+├── LastActivityAt
+├── RealtimeConnectionId
+├── RegistrationResult
+└── Events
+Следует разделять:
+ConversationSessionId — внутренний backend Guid;
+RealtimeConnectionId — идентификатор текущего голосового подключения;
+RegistrationId — демонстрационный номер завершённой регистрации.
+Одна conversation session может пережить несколько Realtime/WebRTC подключений.
+
+# 22. In-memory хранение
+
+Первая реализация использует:
+ConcurrentDictionary<Guid, ConversationSession>
+Хранилище обязательно скрывается за интерфейсом, например:
+public interface IConversationSessionStore
+{
+    Task<ConversationSession?> GetAsync(
+        Guid sessionId,
+        CancellationToken cancellationToken);
+
+    Task CreateAsync(
+        ConversationSession session,
+        CancellationToken cancellationToken);
+
+    Task UpdateAsync(
+        ConversationSession session,
+        CancellationToken cancellationToken);
+
+    Task RemoveAsync(
+        Guid sessionId,
+        CancellationToken cancellationToken);
+}
+Первая реализация:
+InMemoryConversationSessionStore
+Не добавлять EF Core и базу данных.
+
+# 23. Конкурентный доступ
+
+Изменения одной сессии должны быть защищены от гонок.
+Допустимое решение для PoC:
+отдельный SemaphoreSlim на сессию;
+либо эквивалентный session-level locking mechanism.
+Каждое успешное изменение анкеты увеличивает:
+public long Version { get; set; }
+Frontend не должен заменять более новое состояние более старым.
+
+# 24. Тайм-ауты
+
+Начальные значения, доступные через configuration:
+незавершённая неактивная сессия: 30 минут;
+завершённая сессия: 60 минут;
+интервал cleanup service: 5 минут.
+BackgroundService периодически удаляет устаревшие сессии.
+
+# 25. Обновление страницы и восстановление
+
+Frontend хранит sessionId в sessionStorage.
+После обновления страницы frontend:
+Читает sessionId.
+Запрашивает текущее состояние сессии у backend.
+Восстанавливает анкету и журнал доступных событий.
+Не пытается восстановить старое WebRTC-соединение.
+Предлагает создать новое голосовое подключение и продолжить разговор.
+Новая Realtime-сессия должна получить актуальное состояние анкеты.
+
+# 26. Разрыв WebRTC
+
+При разрыве:
+анкета не удаляется;
+frontend отображает статус потери соединения;
+допускается ограниченное число автоматических попыток переподключения;
+после переподключения используется та же ConversationSession;
+создаётся новый Realtime connection;
+модель получает актуальный registration state.
+Точное число retry attempts является локальной реализационной деталью и должно быть configurable.
+
+# 27. HTTP API
+
+Точный URL-дизайн можно уточнить при реализации, но backend должен предоставлять операции для:
+создания conversation session;
+чтения состояния conversation session;
+изменения статуса соединения;
+выдачи безопасных Realtime session credentials/configuration;
+исполнения backend tool call;
+ручного завершения или abandon сессии для UI;
+получения справочных данных;
+health check.
+Примерный API:
+POST   /api/conversation-sessions
+GET    /api/conversation-sessions/{sessionId}
+POST   /api/conversation-sessions/{sessionId}/realtime-session
+POST   /api/conversation-sessions/{sessionId}/tools/{toolName}
+POST   /api/conversation-sessions/{sessionId}/abandon
+GET    /api/reference-data/regions
+GET    /health
+Tool endpoint должен использовать строгие типизированные контракты либо надёжный dispatcher с отдельной validation schema для каждого tool.
+
+# 28. SignalR
+
+SignalR используется для живых обновлений frontend.
+Минимально необходимые события:
+session state changed;
+registration draft changed;
+transcript received;
+tool call received;
+tool call completed;
+validation failed;
+connection status changed;
+registration completed;
+diagnostic event added.
+SignalR не является источником истины. После переподключения frontend получает полное состояние через HTTP.
+
+# 29. Realtime tool call flow
+
+Предпочтительный PoC flow:
+OpenAI Realtime
+    ↓ tool call через WebRTC data channel
+React frontend
+    ↓ authenticated/validated HTTP request
+ASP.NET Core tool endpoint
+    ↓
+Registration application services
+    ↓
+In-memory session
+    ↓
+Tool result
+    ↓
+React frontend
+    ↓ tool result через Realtime data channel
+OpenAI Realtime
+Frontend является транспортным посредником, но не реализует бизнес-правила tools.
+Все решения о допустимости изменения принимает backend.
+Архитектура tool handlers должна позволять в будущем перенести обработку Realtime events на server-side WebSocket/SIP transport.
+
+# 30. Правила голосового ассистента
+
+Ассистент должен:
+говорить спокойно и уважительно;
+использовать короткие понятные вопросы;
+не перегружать пользователя техническими терминами;
+поддерживать русский и украинский языки;
+продолжать на языке пользователя;
+понимать смешанную речь;
+позволять пользователю исправляться;
+не спорить;
+не выдумывать отсутствующие сведения;
+не подменять подтверждение предположением;
+принимать несколько полей из одной реплики;
+не задавать повторно вопрос, если поле уже заполнено;
+не проговаривать полный внутренний JSON;
+объяснять, какое значение требует повторения;
+сообщать о временной технической ошибке понятными словами;
+не заявлять об успехе до успешного ответа complete_registration.
+
+# 31. Транскрипция и журнал событий
+
+Frontend показывает:
+пользовательские транскрипты;
+реплики ассистента;
+технические события в отдельной developer-панели.
+Аудио не сохраняется.
+Журнал сессии может содержать:
+public sealed record ConversationEvent(
+    DateTimeOffset Timestamp,
+    string Type,
+    string? Message,
+    object? Data);
+Типы событий:
+SessionCreated;
+RealtimeConnecting;
+RealtimeConnected;
+RealtimeDisconnected;
+UserTranscriptReceived;
+AssistantTranscriptReceived;
+ToolCallReceived;
+ToolCallCompleted;
+FieldUpdated;
+FieldConfirmed;
+FieldCleared;
+FieldNeedsClarification;
+ValidationFailed;
+RegistrationCompleting;
+RegistrationCompleted;
+SessionFailed;
+SessionAbandoned.
+Не допускать неограниченного роста event list. Максимальный размер должен быть configurable либо ограничен разумным числом записей.
+
+# 32. Пользовательский интерфейс
+
+Первая версия состоит из одной страницы.
+Основные зоны:
+
+# Header
+
+название демо;
+session ID;
+общий статус;
+индикатор соединения.
+
+# Voice controls
+
+«Начать разговор»;
+«Продолжить разговор»;
+«Завершить разговор»;
+«Сбросить демо»;
+состояние микрофона;
+состояние подключения;
+индикатор «пользователь говорит»;
+индикатор «AI говорит».
+
+# Conversation panel
+
+транскрипция пользователя;
+транскрипция AI;
+автоматическая прокрутка;
+понятное разделение участников.
+
+# Registration panel
+
+Для каждого поля:
+название;
+нормализованное значение;
+status;
+признак обязательности;
+сообщение об ошибке или необходимости уточнения.
+Отдельно отображаются:
+отсутствующие обязательные поля;
+поля, требующие уточнения;
+поля, ожидающие подтверждения;
+возможность завершения регистрации.
+
+# Result panel
+
+После успешной регистрации:
+registration ID;
+статус успеха;
+финальный registration DTO;
+кнопка запуска новой демонстрации.
+
+# Developer panel
+
+Сворачиваемая панель:
+Realtime events;
+tool calls;
+tool responses;
+backend events;
+validation errors;
+текущая версия анкеты;
+текущее полное состояние сессии;
+Realtime connection ID.
+Интерфейс должен быть аккуратным и демонстрационным, но не требует сложной дизайн-системы.
+
+# 33. Обработка ошибок
+
+Backend должен возвращать машинно-читаемые error codes и понятные messages.
+Необходимые категории:
+session not found;
+session expired;
+invalid session status;
+unknown tool;
+invalid field name;
+invalid field value;
+region not found;
+region ambiguous;
+required field missing;
+field requires clarification;
+field requires confirmation;
+registration already completed;
+Realtime configuration failure;
+OpenAI API failure;
+internal error.
+Ошибка одного tool call не должна уничтожать conversation session.
+При ошибке backend должен возвращать модели достаточно информации, чтобы она могла:
+повторить вопрос;
+предложить допустимые варианты;
+сообщить о временной ошибке;
+продолжить регистрацию.
+
+# 34. Безопасность
+
+Постоянный OpenAI API key хранится только на backend.
+API key не включается в frontend bundle.
+API key не логируется.
+Frontend получает только краткоживущие данные, необходимые для Realtime connection.
+Tool endpoint проверяет существование и состояние conversation session.
+Backend не доверяет значениям, статусам или именам полей, переданным моделью.
+CORS ограничивается origin frontend в development configuration.
+В README должно быть указано, что PoC не предназначен для обработки реальных персональных данных.
+Не записывать полный регистрационный DTO в обычные production-style logs.
+Developer panel допустима только как часть демонстрационного PoC.
+
+# 35. Тестирование
+
+
+# Unit tests
+
+Обязательно покрыть:
+создание пустого RegistrationDraft;
+обязательность полей;
+условную обязательность полей ВПЛ;
+переходы статусов;
+отклонение неизвестного field name;
+нормализацию номера телефона;
+валидацию даты рождения;
+валидацию года справки;
+поиск региона по русскому названию;
+поиск региона по украинскому названию;
+неоднозначный регион;
+невозможность completion при пропущенных данных;
+невозможность completion при NeedsClarification;
+невозможность completion без consent;
+невозможность completion без final confirmation;
+успешное формирование final DTO;
+fake registration ID;
+очистку устаревших сессий.
+
+# Integration tests
+
+Проверить:
+Создание сессии.
+Чтение пустого состояния.
+Обновление нескольких полей одним tool call.
+Получение missing fields.
+Подтверждение полей.
+Исправление поля.
+Очистку поля.
+Выбор категории ВПЛ.
+Применение условно обязательных полей.
+Успешное завершение регистрации.
+Повторный completion уже завершённой сессии.
+Восстановление состояния по session ID.
+
+# Ручные голосовые сценарии
+
+Сценарий 1 — последовательные ответы.
+Сценарий 2 — пользователь сообщает ФИО и дату рождения одной фразой.
+Сценарий 3 — пользователь исправляет номер телефона.
+Сценарий 4 — пользователь отказывается сообщить email.
+Сценарий 5 — русская речь.
+Сценарий 6 — украинская речь.
+Сценарий 7 — смешанная русско-украинская речь.
+Сценарий 8 — пользователь называет русский вариант области.
+Сценарий 9 — разрыв WebRTC и продолжение сессии.
+Сценарий 10 — обновление страницы и восстановление анкеты.
+Сценарий 11 — попытка завершения при незаполненном поле.
+Сценарий 12 — пользователь исправляет данные во время итоговой сводки.
+
+# 36. Этапы реализации
+
+
+# Этап 1. Каркас solution
+
+Создать:
+solution;
+ASP.NET Core Web API;
+backend domain/application/infrastructure separation без избыточной архитектуры;
+xUnit test projects;
+React + TypeScript + Vite frontend;
+базовую конфигурацию;
+health endpoint;
+базовую страницу frontend;
+README;
+команды сборки и запуска.
+Результат: backend и frontend запускаются, тесты проходят, OpenAI ещё не подключён.
+
+# Этап 2. Domain model и validation rules
+
+Реализовать:
+registration fields;
+statuses;
+user categories;
+registration draft;
+conversation session;
+validation result;
+completion eligibility rules;
+unit tests.
+Результат: вся бизнес-логика анкеты проверяется тестами без HTTP и OpenAI.
+
+# Этап 3. In-memory session management
+
+Реализовать:
+session store interface;
+in-memory implementation;
+session locking;
+versioning;
+event journal;
+expiration;
+cleanup service;
+tests.
+Результат: backend умеет надёжно хранить несколько независимых сессий.
+
+# Этап 4. Backend registration tools
+
+Реализовать handlers:
+update fields;
+confirm fields;
+mark clarification;
+clear fields;
+get state;
+complete registration.
+Добавить:
+field registry;
+нормализацию;
+строгую валидацию;
+tool result DTO;
+tests.
+Результат: инструменты можно вызывать напрямую через application layer.
+
+# Этап 5. Reference data
+
+Реализовать:
+справочник регионов;
+русские и украинские aliases;
+matching;
+ambiguous/not-found result;
+integration с update tool;
+tests.
+
+# Этап 6. Fake HFU Registration
+
+Реализовать:
+final DTO mapper;
+fake service;
+registration ID generator;
+completion workflow;
+tests.
+
+# Этап 7. Backend HTTP API
+
+Реализовать:
+session endpoints;
+tool execution endpoint;
+reference data endpoint;
+status transitions;
+Problem Details/error contracts;
+integration tests.
+Результат: полный регистрационный flow можно выполнить через Swagger без OpenAI.
+
+# Этап 8. React UI без голоса
+
+Реализовать:
+session creation;
+session restoration;
+registration state display;
+manual developer tool-call emulator;
+result panel;
+error display.
+Результат: регистрационный сценарий можно проверить через UI без Realtime API.
+
+# Этап 9. SignalR
+
+Реализовать:
+hub;
+session groups;
+typed event contracts;
+frontend connection;
+live state refresh;
+reconnect;
+developer events.
+
+# Этап 10. OpenAI Realtime WebRTC
+
+Реализовать:
+backend Realtime session endpoint;
+WebRTC connection;
+microphone input;
+remote audio playback;
+data channel;
+connection states;
+Realtime transcripts;
+safe configuration.
+Результат: пользователь и AI могут разговаривать без регистрационных tools.
+
+# Этап 11. Tool-call bridge
+
+Реализовать:
+получение Realtime tool call;
+dispatch на backend;
+передачу результата модели;
+correlation IDs;
+duplicate protection;
+diagnostic events;
+обработку ошибок.
+
+# Этап 12. Registration system prompt
+
+Создать и протестировать prompt, который:
+определяет роль ассистента;
+задаёт правила разговора;
+описывает обязательность полей;
+запрещает выдумывать данные;
+требует пользоваться tools;
+требует проверять server state;
+управляет подтверждениями;
+управляет completion.
+Prompt хранится на backend либо в отдельном versioned файле.
+
+# Этап 13. Reconnect и recovery
+
+Реализовать:
+sessionStorage;
+page refresh recovery;
+новый Realtime connection для существующей сессии;
+передачу актуального registration state;
+ограниченный retry;
+UI reconnect states.
+
+# Этап 14. Developer panel
+
+Добавить:
+Realtime events;
+tool calls;
+tool results;
+session events;
+current JSON;
+version;
+validation results;
+connection identifiers.
+
+# Этап 15. Финальное тестирование и demo polish
+
+Выполнить:
+все автоматические тесты;
+ручные голосовые сценарии;
+исправление race conditions;
+обработку permission denied для микрофона;
+понятные сообщения об ошибках;
+README setup;
+.env.example или backend configuration example;
+финальную проверку отсутствия API key во frontend;
+демонстрационный сценарий для презентации.
+
+# 37. Критерии успешности PoC
+
+PoC считается успешным, если:
+Пользователь может открыть браузерное приложение и начать голосовой разговор.
+AI ведёт естественную анкету.
+Несколько сведений из одной реплики сохраняются корректно.
+Backend является единственным источником истины.
+Пропущенные обязательные поля невозможно обойти.
+Номер телефона и другие критичные сведения подтверждаются.
+Пользователь может исправить ранее сохранённое значение.
+Русские и украинские названия регионов сопоставляются backend.
+Регистрация не завершается без consent и итогового подтверждения.
+Fake HFU service возвращает registration ID.
+AI сообщает об успехе только после ответа backend.
+UI показывает актуальную анкету и диагностику.
+После обновления страницы незавершённая анкета восстанавливается.
+После разрыва WebRTC можно создать новое подключение к той же сессии.
+OpenAI API key отсутствует во frontend.
+Backend unit и integration tests проходят.
+Вся система запускается локально по README.
+
+# 38. Архитектурные запреты
+
+При реализации нельзя без отдельного согласования:
+переносить RegistrationDraft во frontend как источник истины;
+хранить постоянный OpenAI API key в React;
+позволять модели формировать и отправлять финальный registration DTO напрямую;
+завершать регистрацию без backend validation;
+добавлять PostgreSQL, Redis или EF Core;
+добавлять production HFU integration;
+объединять все tool operations в один невалидируемый универсальный endpoint;
+подтверждать поля без пользовательского подтверждения;
+позволять AI самостоятельно генерировать region IDs;
+добавлять тяжёлые framework dependencies без необходимости;
+начинать с реализации телефонии;
+сохранять аудио;
+заменять маленькие backend tools передачей всего черновика от модели.
+
+# 39. Инструкции для Codex
+
+При работе над проектом Codex должен:
+Сначала изучать текущее состояние репозитория.
+Не переписывать уже работающие части без необходимости.
+Реализовывать только текущий согласованный этап.
+Не забегать в последующие этапы.
+Перед изменениями кратко описывать план.
+Применять test-driven development к domain и application logic.
+После каждого этапа запускать build и tests.
+Исправлять warnings, связанные с внесёнными изменениями.
+Не скрывать ошибки пустыми catch.
+Не добавлять placeholders, fake implementations или TODO, если они не являются явно частью текущего этапа.
+Делать небольшие логичные commits, если Codex работает в git-репозитории и имеет разрешение на commit.
+Документировать принятые локальные решения.
+Останавливать этап после выполнения его Definition of Done.
+Сообщать, какие файлы созданы или изменены.
+Сообщать точные команды проверки.
+Не утверждать, что функция работает, пока она не проверена соответствующей командой или тестом.
+
+# 40. Общий Definition of Done
+
+Проект считается завершённым, когда:
+реализованы все этапы;
+backend и frontend собираются;
+автоматические тесты проходят;
+браузерный голосовой сценарий работает;
+tool calls изменяют серверный RegistrationDraft;
+fake registration завершается успешно;
+recovery работает;
+developer panel показывает события;
+README содержит полную инструкцию запуска;
+секреты не находятся в репозитории;
+архитектура допускает последующую замену WebRTC transport на SIP transport.
