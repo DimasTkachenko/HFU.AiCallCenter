@@ -1,3 +1,5 @@
+using Hfu.VoiceRegistration.Application.RegistrationCompletion;
+
 namespace Hfu.VoiceRegistration.Application.RegistrationTools;
 
 public interface IRegistrationToolService
@@ -25,5 +27,10 @@ public interface IRegistrationToolService
 
     Task<RegistrationToolResult> GetRegistrationStateAsync(
         Guid sessionId,
+        CancellationToken cancellationToken);
+
+    Task<RegistrationToolResult> CompleteRegistrationAsync(
+        Guid sessionId,
+        CompleteRegistrationRequest request,
         CancellationToken cancellationToken);
 }

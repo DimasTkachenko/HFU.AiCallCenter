@@ -12,6 +12,7 @@ flowchart LR
     Api --> App["Application layer"]
     App --> Domain["Domain layer"]
     Api --> Infra["Infrastructure layer"]
+    Infra --> FakeHfu["Fake HFU adapter"]
 ```
 
 The runtime surface still exposes only `GET /health`. The frontend calls that endpoint and displays loading, healthy, and error states.
@@ -20,7 +21,7 @@ The runtime surface still exposes only `GET /health`. The frontend calls that en
 
 - `Hfu.VoiceRegistration.Domain`: registration field state, draft model, user categories, conversation session concept, and completion validation. It has no external dependencies.
 - `Hfu.VoiceRegistration.Application`: use cases and contracts. It references Domain, exposes `AddApplication`, and owns backend registration tool handlers.
-- `Hfu.VoiceRegistration.Infrastructure`: future external adapters. It references Application and exposes `AddInfrastructure`.
+- `Hfu.VoiceRegistration.Infrastructure`: in-memory infrastructure adapters, including session storage and fake HFU registration. It references Application and exposes `AddInfrastructure`.
 - `Hfu.VoiceRegistration.Api`: ASP.NET Core host and HTTP endpoints. It references Application and Infrastructure.
 
 `Program.cs` should remain composition-focused. New service registrations should live in layer-specific extension methods.
@@ -68,7 +69,7 @@ The service supports:
 
 The service validates field names and values server-side before mutating state. Invalid tool input returns structured errors and leaves the stored `RegistrationDraft` unchanged. Successful mutations run through `IConversationSessionStore.UpdateAsync`, set the session active, advance session versioning through the existing event journal, and return a state snapshot with missing required fields, fields needing clarification, fields awaiting confirmation, and `RegistrationCanBeCompleted`.
 
-Stage 4 deliberately does not expose HTTP endpoints, call OpenAI, or submit final registrations. The actual `complete_registration` flow remains deferred until fake HFU registration and API stages.
+Stage 4 deliberately does not expose HTTP endpoints, call OpenAI, or submit final registrations. The application-level `complete_registration` flow is implemented in Stage 6; HTTP exposure remains deferred to the backend HTTP API stage.
 
 ## Stage 5 Reference Data
 
@@ -79,6 +80,21 @@ Canonical region display names are Ukrainian. The resolver accepts Ukrainian and
 Resolved regions are stored in the draft as Ukrainian canonical names plus a server-owned `ReferenceId`. Ambiguous or unknown regions are persisted as `NeedsClarification` with the raw value and clarification reason; the tool result returns `RegionAmbiguous` or `RegionNotFound` so a future voice assistant can ask a focused follow-up question.
 
 Stage 5 still avoids HTTP reference data endpoints. Those belong to the backend HTTP API stage.
+
+## Stage 6 Fake HFU Registration
+
+`Hfu.VoiceRegistration.Application.RegistrationCompletion` owns the completion contracts and final DTO mapper. `complete_registration` accepts only `personalDataConsent` and `registrationConfirmed`; the final registration DTO is composed from the backend-owned `RegistrationDraft`.
+
+The completion workflow:
+
+- persists the final consent and confirmation flags;
+- validates the complete draft with the conservative domain rules;
+- returns `RegistrationCannotBeCompleted` when validation fails;
+- calls `IFakeHfuRegistrationService` only for valid, not-yet-completed sessions;
+- marks the conversation session completed and stores `RegistrationResult`;
+- returns `RegistrationAlreadyCompleted` with the existing result and state on repeated completion attempts.
+
+`Hfu.VoiceRegistration.Infrastructure.RegistrationCompletion` provides the current fake adapter. Demo registration IDs are generated in memory as `DEMO-{year}-{counter:000000}`. This stage does not call the real HFU backend and does not expose HTTP registration endpoints.
 
 ## Future Voice Architecture
 
@@ -114,4 +130,4 @@ Registration logic must not depend directly on browser WebRTC. A later SIP/IP te
 
 ## Current Non-Goals
 
-The current implementation does not include OpenAI, WebRTC, SignalR, fake HFU registration, final registration submission, databases, Redis, HTTP registration APIs, HTTP reference data endpoints, or production HFU integration.
+The current implementation does not include OpenAI, WebRTC, SignalR, databases, Redis, HTTP registration APIs, HTTP reference data endpoints, or production HFU integration.

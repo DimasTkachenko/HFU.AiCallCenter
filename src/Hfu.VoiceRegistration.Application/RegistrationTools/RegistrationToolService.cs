@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Net.Mail;
 using System.Text.Json;
 using Hfu.VoiceRegistration.Application.Conversations;
+using Hfu.VoiceRegistration.Application.RegistrationCompletion;
 using Hfu.VoiceRegistration.Application.ReferenceData;
 using Hfu.VoiceRegistration.Domain.Conversations;
 using Hfu.VoiceRegistration.Domain.Registration;
@@ -14,21 +15,27 @@ public sealed class RegistrationToolService : IRegistrationToolService
     private const string FieldConfirmedEventType = "FieldConfirmed";
     private const string FieldNeedsClarificationEventType = "FieldNeedsClarification";
     private const string FieldClearedEventType = "FieldCleared";
+    private const string ValidationFailedEventType = "ValidationFailed";
+    private const string RegistrationCompletingEventType = "RegistrationCompleting";
+    private const string RegistrationCompletedEventType = "RegistrationCompleted";
 
     private readonly IConversationSessionStore _store;
     private readonly TimeProvider _timeProvider;
     private readonly IRegionResolver _regionResolver;
+    private readonly IFakeHfuRegistrationService? _fakeHfuRegistrationService;
     private readonly RegistrationFieldRegistry _fieldRegistry;
 
     public RegistrationToolService(
         IConversationSessionStore store,
         TimeProvider timeProvider,
-        IRegionResolver? regionResolver = null)
+        IRegionResolver? regionResolver = null,
+        IFakeHfuRegistrationService? fakeHfuRegistrationService = null)
     {
         _store = store;
         _timeProvider = timeProvider;
         _regionResolver = regionResolver
             ?? new RegionResolver(new UkrainianRegionReferenceDataProvider());
+        _fakeHfuRegistrationService = fakeHfuRegistrationService;
         _fieldRegistry = RegistrationFieldRegistry.Instance;
     }
 
@@ -201,6 +208,145 @@ public sealed class RegistrationToolService : IRegistrationToolService
         }
 
         return RegistrationToolResult.Success(CreateState(session));
+    }
+
+    public async Task<RegistrationToolResult> CompleteRegistrationAsync(
+        Guid sessionId,
+        CompleteRegistrationRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var currentSession = await _store.GetAsync(sessionId, cancellationToken);
+        if (currentSession is null)
+        {
+            return RegistrationToolResult.Failure(
+                null,
+                new[]
+                {
+                    new RegistrationToolError(
+                        RegistrationToolErrorCodes.SessionNotFound,
+                        null,
+                        $"Conversation session '{sessionId}' was not found.")
+                });
+        }
+
+        if (currentSession.Status == ConversationSessionStatus.Completed
+            && currentSession.RegistrationResult is not null)
+        {
+            return RegistrationToolResult.Failure(
+                CreateState(currentSession),
+                new[]
+                {
+                    new RegistrationToolError(
+                        RegistrationToolErrorCodes.RegistrationAlreadyCompleted,
+                        null,
+                        "Registration has already been completed.")
+                },
+                CreateCompletionDetails(currentSession));
+        }
+
+        IReadOnlyList<RegistrationToolError> errors = Array.Empty<RegistrationToolError>();
+        RegistrationCompletionDetails? completion = null;
+
+        ConversationSession updated;
+        try
+        {
+            updated = await _store.UpdateAsync(
+                sessionId,
+                async (current, mutationCancellationToken) =>
+                {
+                    if (current.Status == ConversationSessionStatus.Completed
+                        && current.RegistrationResult is not null)
+                    {
+                        errors = new[]
+                        {
+                            new RegistrationToolError(
+                                RegistrationToolErrorCodes.RegistrationAlreadyCompleted,
+                                null,
+                                "Registration has already been completed.")
+                        };
+                        completion = CreateCompletionDetails(current);
+                        return current;
+                    }
+
+                    var now = _timeProvider.GetUtcNow();
+                    var draft = current.RegistrationDraft with
+                    {
+                        PersonalDataConsent = request.PersonalDataConsent,
+                        RegistrationConfirmed = request.RegistrationConfirmed
+                    };
+                    var validation = RegistrationCompletionValidator.Evaluate(draft);
+                    if (!validation.CanComplete)
+                    {
+                        errors = new[]
+                        {
+                            new RegistrationToolError(
+                                RegistrationToolErrorCodes.RegistrationCannotBeCompleted,
+                                null,
+                                "Registration cannot be completed until all validation issues are resolved.")
+                        };
+
+                        return (current with
+                        {
+                            Status = ConversationSessionStatus.Active,
+                            RegistrationDraft = draft,
+                            LastActivityAt = now
+                        }).RecordEvent(
+                            ValidationFailedEventType,
+                            "Registration completion validation failed.",
+                            now);
+                    }
+
+                    var fakeHfuRegistrationService = _fakeHfuRegistrationService
+                        ?? throw new InvalidOperationException("Fake HFU registration service is not configured.");
+                    var finalRegistration = FinalRegistrationDtoMapper.Map(draft);
+                    var response = await fakeHfuRegistrationService.RegisterAsync(
+                        finalRegistration,
+                        mutationCancellationToken);
+                    var registrationResult = new RegistrationResult(
+                        response.RegistrationId,
+                        response.CompletedAt);
+                    completion = new RegistrationCompletionDetails(
+                        finalRegistration,
+                        registrationResult);
+
+                    var completing = (current with
+                    {
+                        Status = ConversationSessionStatus.Completing,
+                        RegistrationDraft = draft,
+                        LastActivityAt = now
+                    }).RecordEvent(
+                        RegistrationCompletingEventType,
+                        "Registration completion started.",
+                        now);
+
+                    return completing
+                        .MarkCompleted(registrationResult)
+                        .RecordEvent(
+                            RegistrationCompletedEventType,
+                            response.Message,
+                            response.CompletedAt);
+                },
+                cancellationToken);
+        }
+        catch (KeyNotFoundException)
+        {
+            return RegistrationToolResult.Failure(
+                null,
+                new[]
+                {
+                    new RegistrationToolError(
+                        RegistrationToolErrorCodes.SessionNotFound,
+                        null,
+                        $"Conversation session '{sessionId}' was not found.")
+                });
+        }
+
+        var state = CreateState(updated);
+        return errors.Count == 0
+            ? RegistrationToolResult.Success(state, completion)
+            : RegistrationToolResult.Failure(state, errors, completion);
     }
 
     private async Task<RegistrationToolResult> MutateFieldNamesAsync(
@@ -377,6 +523,19 @@ public sealed class RegistrationToolService : IRegistrationToolService
             RegistrationToolErrorCodes.UnknownField,
             fieldName,
             $"Registration field '{fieldName}' is not supported.");
+    }
+
+    private static RegistrationCompletionDetails CreateCompletionDetails(
+        ConversationSession session)
+    {
+        if (session.RegistrationResult is null)
+        {
+            throw new InvalidOperationException("Completed registration result is missing.");
+        }
+
+        return new RegistrationCompletionDetails(
+            FinalRegistrationDtoMapper.Map(session.RegistrationDraft),
+            session.RegistrationResult);
     }
 
     private sealed record ToolMutation(

@@ -1,6 +1,8 @@
 using Hfu.VoiceRegistration.Application.Conversations;
+using Hfu.VoiceRegistration.Application.RegistrationCompletion;
 using Hfu.VoiceRegistration.Infrastructure;
 using Hfu.VoiceRegistration.Infrastructure.Conversations;
+using Hfu.VoiceRegistration.Infrastructure.RegistrationCompletion;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -27,11 +29,15 @@ public sealed class DependencyInjectionTests
         using var provider = services.BuildServiceProvider();
 
         var store = provider.GetRequiredService<IConversationSessionStore>();
+        var registrationIdGenerator = provider.GetRequiredService<IRegistrationIdGenerator>();
+        var fakeHfuService = provider.GetRequiredService<IFakeHfuRegistrationService>();
         var timeProvider = provider.GetRequiredService<TimeProvider>();
         var options = provider.GetRequiredService<IOptions<ConversationSessionStoreOptions>>().Value;
         var hostedServices = provider.GetServices<IHostedService>();
 
         Assert.IsType<InMemoryConversationSessionStore>(store);
+        Assert.IsType<InMemoryDemoRegistrationIdGenerator>(registrationIdGenerator);
+        Assert.IsType<FakeHfuRegistrationService>(fakeHfuService);
         Assert.Same(TimeProvider.System, timeProvider);
         Assert.Equal(TimeSpan.FromMinutes(30), options.IncompleteSessionExpiration);
         Assert.Equal(TimeSpan.FromMinutes(60), options.CompletedSessionExpiration);

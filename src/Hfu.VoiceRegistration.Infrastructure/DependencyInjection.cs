@@ -1,5 +1,7 @@
 using Hfu.VoiceRegistration.Application.Conversations;
+using Hfu.VoiceRegistration.Application.RegistrationCompletion;
 using Hfu.VoiceRegistration.Infrastructure.Conversations;
+using Hfu.VoiceRegistration.Infrastructure.RegistrationCompletion;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -18,6 +20,8 @@ public static class DependencyInjection
 
         services.TryAddSingleton(TimeProvider.System);
         services.AddSingleton<IConversationSessionStore, InMemoryConversationSessionStore>();
+        services.AddSingleton<IRegistrationIdGenerator, InMemoryDemoRegistrationIdGenerator>();
+        services.AddScoped<IFakeHfuRegistrationService, FakeHfuRegistrationService>();
         services.AddHostedService<ConversationSessionCleanupService>();
 
         return services;

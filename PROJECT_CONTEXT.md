@@ -240,6 +240,30 @@ Confirmed Stage 5 boundary:
 - do not accept model-generated region IDs as aliases;
 - ambiguous and unknown regions must be persisted as `NeedsClarification`, not silently ignored.
 
+Stage 6 was separately requested and implements fake HFU registration completion.
+
+## Stage 6 Scope
+
+Stage 6 implements:
+
+- application-level `complete_registration`;
+- `CompleteRegistrationRequest` with only `personalDataConsent` and `registrationConfirmed`;
+- backend-owned final registration DTO mapping from `RegistrationDraft`;
+- `IFakeHfuRegistrationService`;
+- in-memory demo registration ID generation with `DEMO-{year}-{counter:000000}`;
+- fake HFU registration response with success, registration ID, message, and completion time;
+- storing `RegistrationResult` on successful completion;
+- repeated completion protection returning `RegistrationAlreadyCompleted` with the existing result/state;
+- Application and Infrastructure tests for completion behavior and fake service behavior.
+
+Confirmed Stage 6 boundary:
+
+- do not add HTTP registration endpoints until Stage 7;
+- do not add OpenAI SDK, Realtime API, WebRTC, SignalR, EF Core, databases, Redis, or production HFU integration;
+- do not accept a final registration DTO from the model or caller;
+- do not generate a new ID for already completed sessions;
+- do not add an artificial fake-service failure scenario.
+
 ## Full Technical Specification Highlights
 
 The full spec describes:

@@ -1,4 +1,5 @@
 using Hfu.VoiceRegistration.Application.Conversations;
+using Hfu.VoiceRegistration.Application.RegistrationCompletion;
 using Hfu.VoiceRegistration.Application.RegistrationTools;
 using Hfu.VoiceRegistration.Domain.Conversations;
 using Hfu.VoiceRegistration.Domain.Registration;
@@ -331,11 +332,212 @@ public sealed class RegistrationToolServiceTests
         Assert.Contains(result.Errors, error => error.Code == RegistrationToolErrorCodes.SessionNotFound);
     }
 
+    [Fact]
+    public async Task CompleteRegistrationCompletesValidDraftWithBackendGeneratedFinalDto()
+    {
+        var now = new DateTimeOffset(2026, 7, 22, 10, 0, 0, TimeSpan.Zero);
+        var store = new FakeConversationSessionStore();
+        var fakeHfu = new RecordingFakeHfuRegistrationService("DEMO-2026-000001", now);
+        var session = ConversationSession.Create(now) with
+        {
+            RegistrationDraft = CompleteDraft() with
+            {
+                PersonalDataConsent = false,
+                RegistrationConfirmed = false
+            }
+        };
+        await store.CreateAsync(session, CancellationToken.None);
+        var service = CreateService(store, now.AddMinutes(1), fakeHfu);
+
+        var result = await service.CompleteRegistrationAsync(
+            session.SessionId,
+            new CompleteRegistrationRequest(
+                PersonalDataConsent: true,
+                RegistrationConfirmed: true),
+            CancellationToken.None);
+
+        var stored = await store.GetAsync(session.SessionId, CancellationToken.None);
+
+        Assert.True(result.Succeeded, FormatErrors(result));
+        Assert.NotNull(result.Completion);
+        Assert.Equal("DEMO-2026-000001", result.Completion.RegistrationResult.RegistrationId);
+        Assert.NotNull(stored);
+        Assert.Equal(ConversationSessionStatus.Completed, stored.Status);
+        Assert.Equal("DEMO-2026-000001", stored.RegistrationResult?.RegistrationId);
+        Assert.True(stored.RegistrationDraft.PersonalDataConsent);
+        Assert.True(stored.RegistrationDraft.RegistrationConfirmed);
+        Assert.Equal(1, fakeHfu.CallCount);
+        Assert.NotNull(fakeHfu.LastRegistration);
+        Assert.Equal("Dimas", fakeHfu.LastRegistration.FirstName);
+        Assert.Equal("Kharkivska oblast", fakeHfu.LastRegistration.CurrentRegion);
+        Assert.Equal("hfu-region-kharkivska", fakeHfu.LastRegistration.CurrentRegionReferenceId);
+    }
+
+    [Fact]
+    public async Task CompleteRegistrationPersistsConsentFlagsButDoesNotCompleteInvalidDraft()
+    {
+        var now = new DateTimeOffset(2026, 7, 22, 10, 0, 0, TimeSpan.Zero);
+        var store = new FakeConversationSessionStore();
+        var fakeHfu = new RecordingFakeHfuRegistrationService("DEMO-2026-000001", now);
+        var session = ConversationSession.Create(now);
+        await store.CreateAsync(session, CancellationToken.None);
+        var service = CreateService(store, now.AddMinutes(1), fakeHfu);
+
+        var result = await service.CompleteRegistrationAsync(
+            session.SessionId,
+            new CompleteRegistrationRequest(
+                PersonalDataConsent: true,
+                RegistrationConfirmed: true),
+            CancellationToken.None);
+
+        var stored = await store.GetAsync(session.SessionId, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains(result.Errors, error => error.Code == RegistrationToolErrorCodes.RegistrationCannotBeCompleted);
+        Assert.NotNull(stored);
+        Assert.NotEqual(ConversationSessionStatus.Completed, stored.Status);
+        Assert.Null(stored.RegistrationResult);
+        Assert.True(stored.RegistrationDraft.PersonalDataConsent);
+        Assert.True(stored.RegistrationDraft.RegistrationConfirmed);
+        Assert.Equal(0, fakeHfu.CallCount);
+        Assert.NotNull(result.State);
+        Assert.False(result.State.RegistrationCanBeCompleted);
+    }
+
+    [Fact]
+    public async Task CompleteRegistrationDoesNotCompleteWhenFieldNeedsClarification()
+    {
+        var now = new DateTimeOffset(2026, 7, 22, 10, 0, 0, TimeSpan.Zero);
+        var store = new FakeConversationSessionStore();
+        var fakeHfu = new RecordingFakeHfuRegistrationService("DEMO-2026-000001", now);
+        var session = ConversationSession.Create(now) with
+        {
+            RegistrationDraft = CompleteDraft() with
+            {
+                CurrentRegion = RegistrationField<string>.NeedsClarification(
+                    rawValue: "Kyiv",
+                    clarificationReason: "Region match is ambiguous.")
+            }
+        };
+        await store.CreateAsync(session, CancellationToken.None);
+        var service = CreateService(store, now.AddMinutes(1), fakeHfu);
+
+        var result = await service.CompleteRegistrationAsync(
+            session.SessionId,
+            new CompleteRegistrationRequest(
+                PersonalDataConsent: true,
+                RegistrationConfirmed: true),
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains(result.Errors, error => error.Code == RegistrationToolErrorCodes.RegistrationCannotBeCompleted);
+        Assert.Equal(0, fakeHfu.CallCount);
+        Assert.NotNull(result.State);
+        Assert.Contains(
+            result.State.FieldsRequiringClarification,
+            field => field == RegistrationFieldNames.CurrentRegion);
+    }
+
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public async Task CompleteRegistrationRequiresConsentAndFinalConfirmation(
+        bool personalDataConsent,
+        bool registrationConfirmed)
+    {
+        var now = new DateTimeOffset(2026, 7, 22, 10, 0, 0, TimeSpan.Zero);
+        var store = new FakeConversationSessionStore();
+        var fakeHfu = new RecordingFakeHfuRegistrationService("DEMO-2026-000001", now);
+        var session = ConversationSession.Create(now) with
+        {
+            RegistrationDraft = CompleteDraft() with
+            {
+                PersonalDataConsent = false,
+                RegistrationConfirmed = false
+            }
+        };
+        await store.CreateAsync(session, CancellationToken.None);
+        var service = CreateService(store, now.AddMinutes(1), fakeHfu);
+
+        var result = await service.CompleteRegistrationAsync(
+            session.SessionId,
+            new CompleteRegistrationRequest(
+                personalDataConsent,
+                registrationConfirmed),
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains(result.Errors, error => error.Code == RegistrationToolErrorCodes.RegistrationCannotBeCompleted);
+        Assert.Equal(0, fakeHfu.CallCount);
+    }
+
+    [Fact]
+    public async Task CompleteRegistrationReturnsExistingResultForAlreadyCompletedSession()
+    {
+        var completedAt = new DateTimeOffset(2026, 7, 22, 10, 0, 0, TimeSpan.Zero);
+        var now = completedAt.AddMinutes(1);
+        var store = new FakeConversationSessionStore();
+        var fakeHfu = new RecordingFakeHfuRegistrationService("DEMO-2026-000002", now);
+        var session = ConversationSession.Create(completedAt) with
+        {
+            RegistrationDraft = CompleteDraft()
+        };
+        session = session.MarkCompleted(new RegistrationResult("DEMO-2026-000001", completedAt));
+        await store.CreateAsync(session, CancellationToken.None);
+        var service = CreateService(store, now, fakeHfu);
+
+        var result = await service.CompleteRegistrationAsync(
+            session.SessionId,
+            new CompleteRegistrationRequest(
+                PersonalDataConsent: true,
+                RegistrationConfirmed: true),
+            CancellationToken.None);
+
+        var stored = await store.GetAsync(session.SessionId, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains(result.Errors, error => error.Code == RegistrationToolErrorCodes.RegistrationAlreadyCompleted);
+        Assert.NotNull(result.Completion);
+        Assert.Equal("DEMO-2026-000001", result.Completion.RegistrationResult.RegistrationId);
+        Assert.NotNull(stored);
+        Assert.Equal("DEMO-2026-000001", stored.RegistrationResult?.RegistrationId);
+        Assert.Equal(0, fakeHfu.CallCount);
+    }
+
     private static RegistrationToolService CreateService(
         IConversationSessionStore store,
         DateTimeOffset utcNow)
     {
         return new RegistrationToolService(store, new FakeTimeProvider(utcNow));
+    }
+
+    private static RegistrationToolService CreateService(
+        IConversationSessionStore store,
+        DateTimeOffset utcNow,
+        IFakeHfuRegistrationService fakeHfuRegistrationService)
+    {
+        return new RegistrationToolService(
+            store,
+            new FakeTimeProvider(utcNow),
+            fakeHfuRegistrationService: fakeHfuRegistrationService);
+    }
+
+    private static RegistrationDraft CompleteDraft()
+    {
+        return RegistrationDraft.Create() with
+        {
+            FirstName = RegistrationField<string>.Captured("Dimas"),
+            LastName = RegistrationField<string>.Captured("Tkachenko"),
+            DateOfBirth = RegistrationField<DateOnly>.Confirmed(new DateOnly(1991, 8, 24)),
+            PhoneNumber = RegistrationField<string>.Confirmed("+380501112233"),
+            CurrentRegion = RegistrationField<string>.Confirmed(
+                "Kharkivska oblast",
+                referenceId: "hfu-region-kharkivska"),
+            CurrentCity = RegistrationField<string>.Confirmed("Kharkiv"),
+            UserCategory = RegistrationField<UserCategory>.Confirmed(UserCategory.Other),
+            PersonalDataConsent = true,
+            RegistrationConfirmed = true
+        };
     }
 
     private static string FormatErrors(RegistrationToolResult result)
@@ -424,6 +626,39 @@ public sealed class RegistrationToolServiceTests
         public override DateTimeOffset GetUtcNow()
         {
             return _utcNow;
+        }
+    }
+
+    private sealed class RecordingFakeHfuRegistrationService : IFakeHfuRegistrationService
+    {
+        private readonly string _registrationId;
+        private readonly DateTimeOffset _completedAt;
+
+        public RecordingFakeHfuRegistrationService(
+            string registrationId,
+            DateTimeOffset completedAt)
+        {
+            _registrationId = registrationId;
+            _completedAt = completedAt;
+        }
+
+        public int CallCount { get; private set; }
+
+        public FinalRegistrationDto? LastRegistration { get; private set; }
+
+        public Task<FakeHfuRegistrationResponse> RegisterAsync(
+            FinalRegistrationDto registration,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            CallCount++;
+            LastRegistration = registration;
+
+            return Task.FromResult(new FakeHfuRegistrationResponse(
+                Success: true,
+                RegistrationId: _registrationId,
+                Message: "Registration completed",
+                CompletedAt: _completedAt));
         }
     }
 }

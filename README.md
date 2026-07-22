@@ -1,6 +1,6 @@
 # Hfu.VoiceRegistration
 
-External advertising PoC for HFU voice-assisted registration. The current implementation contains the Stage 1 runnable skeleton, Stage 2 pure domain model, Stage 3 in-memory conversation session management, Stage 4 application-level backend registration tools, and Stage 5 reference data for region matching.
+External advertising PoC for HFU voice-assisted registration. The current implementation contains the Stage 1 runnable skeleton, Stage 2 pure domain model, Stage 3 in-memory conversation session management, Stage 4 application-level backend registration tools, Stage 5 reference data for region matching, and Stage 6 fake HFU registration completion.
 
 This PoC is not intended to process real personal data. Do not enter real user registration details into local demos.
 
@@ -113,6 +113,19 @@ Stage 5 adds application-level Ukrainian region reference data:
 
 The resolver is integrated into `update_registration_fields` for `currentRegion` and `regionBeforeWar`. HTTP reference data endpoints are still deferred to the backend HTTP API stage.
 
+## Fake HFU Registration
+
+Stage 6 adds the application-level `complete_registration` workflow and an infrastructure fake HFU registration adapter:
+
+- callers can submit only final `personalDataConsent` and `registrationConfirmed` flags;
+- the backend builds the final registration DTO from server-owned draft state;
+- invalid or incomplete drafts return `RegistrationCannotBeCompleted`;
+- already completed sessions return `RegistrationAlreadyCompleted` with the existing completion result and state;
+- fake demo IDs use `DEMO-{year}-{counter:000000}`;
+- no real HFU backend is called.
+
+This stage still does not add HTTP registration endpoints. Future HTTP and OpenAI tool-call adapters should call the application service instead of submitting final registration payloads directly.
+
 ## Frontend
 
 Install dependencies:
@@ -145,7 +158,7 @@ npm.cmd test -- --run
 
 ## Configuration
 
-Current local configuration contains OpenAI placeholders and Stage 3 session timeout settings:
+Current local configuration contains OpenAI placeholders and session timeout settings:
 
 ```json
 {
@@ -170,12 +183,11 @@ No OpenAI API key is required yet.
 
 These are intentionally not implemented yet:
 
-- fake HFU registration
 - SignalR
 - OpenAI client or Realtime API
 - WebRTC
 - OpenAI tool-call bridge
+- HTTP registration endpoints
 - HTTP reference data endpoint
-- final `complete_registration` submission flow
 - EF Core, database packages, Redis, or persistent storage
 - production HFU integration
