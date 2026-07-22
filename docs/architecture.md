@@ -125,6 +125,14 @@ The UI supports:
 
 The frontend does not own registration rules and does not submit final registration DTOs. It sends only typed Stage 7 requests and replaces its displayed state with backend responses.
 
+## Stage 9 SignalR Live Updates
+
+`Hfu.VoiceRegistration.Api` now hosts a SignalR hub at `/hubs/conversation`. Browser clients join one conversation-session group at a time through `JoinSession(Guid)` and may leave with `LeaveSession(Guid)`.
+
+The hub publishes lightweight typed `ConversationEvent` messages after existing HTTP actions mutate state. SignalR payloads are intentionally not full registration DTOs: the React UI treats them as live notifications, appends them to a compact event list, and refreshes authoritative session state through `GET /api/conversation-sessions/{sessionId}`.
+
+Stage 9 remains local and in-memory. It does not add OpenAI, WebRTC, an OpenAI tool-call bridge, Redis/backplane scale-out, persistence, auth, or production HFU integration.
+
 ## Future Voice Architecture
 
 ```mermaid
@@ -159,4 +167,4 @@ Registration logic must not depend directly on browser WebRTC. A later SIP/IP te
 
 ## Current Non-Goals
 
-The current implementation does not include OpenAI, WebRTC, SignalR live updates, databases, Redis, audio/transcript UI, or production HFU integration.
+The current implementation does not include OpenAI, WebRTC, the OpenAI tool-call bridge, databases, Redis/backplane scale-out, audio/transcript UI, or production HFU integration.

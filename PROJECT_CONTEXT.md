@@ -309,6 +309,26 @@ Confirmed Stage 8 boundary:
 - do not submit final registration DTOs from the frontend;
 - backend remains authoritative for state, validation, completion, and fake HFU registration.
 
+Stage 9 was separately requested and implements SignalR live updates with the recommended lightweight-event approach.
+
+## Stage 9 Scope
+
+Stage 9 implements:
+
+- ASP.NET Core SignalR hub at `/hubs/conversation`;
+- session-scoped hub groups through `JoinSession(Guid)` and `LeaveSession(Guid)`;
+- typed backend realtime events after session create, abandon, registration tool mutations, validation failures, state reads, and completion;
+- React SignalR client wrapper using `@microsoft/signalr`;
+- Vite proxy support for `/hubs`;
+- browser live status, compact recent-event list, create/restore session group join, reconnect rejoin, and HTTP refresh after live events;
+- backend integration tests and frontend Vitest coverage for the hub/client/UI flow.
+
+Confirmed Stage 9 boundary:
+
+- SignalR events are notifications only, not the source of truth;
+- frontend must refresh full session state through HTTP after relevant live events;
+- do not add OpenAI SDK, Realtime API, WebRTC, microphone capture, audio playback, transcript UI, OpenAI tool-call bridge, EF Core, databases, Redis/backplane, persistent storage, auth, or production HFU integration.
+
 ## Full Technical Specification Highlights
 
 The full spec describes:

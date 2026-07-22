@@ -65,7 +65,7 @@ The UI adds a live connection indicator in the existing session/diagnostics area
 
 When a session is created or restored, the frontend opens the SignalR connection if necessary and joins that session group. When the current session changes, it leaves the previous group and joins the next one. On reconnect, it rejoins the current session group and refreshes session state through HTTP.
 
-When the frontend receives `conversationEvent`, it appends the event to a compact developer event list and refreshes full session state through HTTP. The UI must not trust SignalR payloads as full state.
+When the frontend receives the typed hub event `ConversationEvent`, it appends the event to a compact developer event list and refreshes full session state through HTTP. The UI must not trust SignalR payloads as full state.
 
 ## Error Handling
 
@@ -83,7 +83,7 @@ Backend tests cover:
 
 - hub endpoint accepts SignalR client connections;
 - clients can join a session group;
-- state-changing HTTP actions publish `conversationEvent` messages to the joined session group;
+- state-changing HTTP actions publish `ConversationEvent` messages to the joined session group;
 - events include session ID, version, type, and message.
 
 Frontend tests cover:

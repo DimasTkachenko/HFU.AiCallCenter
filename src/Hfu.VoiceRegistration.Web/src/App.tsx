@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   abandonConversationSession,
   clearRegistrationFields,
@@ -12,6 +12,14 @@ import {
   updateRegistrationFields
 } from "./api/registrationClient";
 import { fetchHealth, type HealthResponse } from "./api/healthClient";
+import {
+  createConversationRealtimeClient,
+  type ConversationRealtimeClient
+} from "./api/conversationRealtimeClient";
+import type {
+  ConversationRealtimeEvent,
+  RealtimeConnectionState
+} from "./api/realtimeTypes";
 import type {
   ConversationSessionResponse,
   ProblemDetails,
@@ -134,6 +142,50 @@ export default function App() {
   const [notice, setNotice] = useState<string | null>(null);
   const [isBusy, setIsBusy] = useState(false);
   const [form, setForm] = useState<FormState>(initialForm);
+  const [liveState, setLiveState] = useState<RealtimeConnectionState>({ status: "idle" });
+  const [liveEvents, setLiveEvents] = useState<ConversationRealtimeEvent[]>([]);
+  const realtimeClientRef = useRef<ConversationRealtimeClient | null>(null);
+  const currentSessionIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const realtimeClient = createConversationRealtimeClient({ baseUrl: apiBaseUrl });
+    realtimeClientRef.current = realtimeClient;
+
+    const unsubscribeEvent = realtimeClient.onEvent((conversationEvent) => {
+      setLiveEvents((current) => [
+        conversationEvent,
+        ...current.filter((item) => item.eventId !== conversationEvent.eventId)
+      ].slice(0, 8));
+
+      if (conversationEvent.sessionId !== currentSessionIdRef.current) {
+        return;
+      }
+
+      getConversationSession(conversationEvent.sessionId, apiBaseUrl)
+        .then((refreshedSession) => {
+          applySession(refreshedSession);
+        })
+        .catch((error: unknown) => {
+          setProblem(toProblem(error, "Не удалось обновить сессию после live события."));
+        });
+    });
+    const unsubscribeStatus = realtimeClient.onStatusChange((state) => {
+      setLiveState(state);
+      if (state.status === "connected" && currentSessionIdRef.current) {
+        realtimeClient.joinSession(currentSessionIdRef.current)
+          .catch((error: unknown) => {
+            setLiveState({ status: "error", message: errorMessage(error) });
+          });
+      }
+    });
+
+    return () => {
+      unsubscribeEvent();
+      unsubscribeStatus();
+      void realtimeClient.stop();
+      realtimeClientRef.current = null;
+    };
+  }, [apiBaseUrl]);
 
   useEffect(() => {
     let isActive = true;
@@ -167,8 +219,10 @@ export default function App() {
       getConversationSession(storedSessionId, apiBaseUrl)
         .then((restoredSession) => {
           if (isActive) {
+            const previousSessionId = currentSessionIdRef.current;
             applySession(restoredSession);
             setNotice("Сессия восстановлена");
+            void joinLiveSession(restoredSession.sessionId, previousSessionId);
           }
         })
         .catch((error: unknown) => {
@@ -195,6 +249,7 @@ export default function App() {
   }, [registrationState]);
 
   function applySession(nextSession: ConversationSessionResponse) {
+    currentSessionIdRef.current = nextSession.sessionId;
     setSession(nextSession);
     setRegistrationState(nextSession.state);
   }
@@ -222,10 +277,12 @@ export default function App() {
   async function handleCreateSession() {
     await runAction(async () => {
       const created = await createConversationSession(apiBaseUrl);
+      const previousSessionId = currentSessionIdRef.current;
       localStorage.setItem(sessionStorageKey, created.sessionId);
       applySession(created);
       setLastToolResult(null);
       setNotice("Сессия создана");
+      await joinLiveSession(created.sessionId, previousSessionId);
     });
   }
 
@@ -251,7 +308,42 @@ export default function App() {
       applySession(abandoned);
       localStorage.removeItem(sessionStorageKey);
       setNotice("Сессия завершена вручную");
+      await leaveLiveSession(currentSessionId);
     });
+  }
+
+  async function joinLiveSession(
+    nextSessionId: string,
+    previousSessionId: string | null
+  ) {
+    const realtimeClient = realtimeClientRef.current;
+    if (!realtimeClient) {
+      return;
+    }
+
+    try {
+      await realtimeClient.connect();
+      if (previousSessionId && previousSessionId !== nextSessionId) {
+        await realtimeClient.leaveSession(previousSessionId);
+      }
+
+      await realtimeClient.joinSession(nextSessionId);
+    } catch (error: unknown) {
+      setLiveState({ status: "error", message: errorMessage(error) });
+    }
+  }
+
+  async function leaveLiveSession(sessionId: string) {
+    const realtimeClient = realtimeClientRef.current;
+    if (!realtimeClient) {
+      return;
+    }
+
+    try {
+      await realtimeClient.leaveSession(sessionId);
+    } catch (error: unknown) {
+      setLiveState({ status: "error", message: errorMessage(error) });
+    }
   }
 
   async function handleUpdateFields() {
@@ -380,6 +472,7 @@ export default function App() {
             session={session}
             notice={notice}
             isBusy={isBusy}
+            liveState={liveState}
             onCreateSession={handleCreateSession}
             onRefreshSession={handleRefreshSession}
             onAbandonSession={handleAbandonSession}
@@ -505,6 +598,7 @@ export default function App() {
           <RegistrationStatePanel state={registrationState} fieldMap={fieldMap} />
           <ToolFeedbackPanel result={lastToolResult} />
           <CompletionPanel result={lastToolResult} />
+          <LiveEventsPanel events={liveEvents} />
         </section>
       </section>
     </main>
@@ -550,6 +644,7 @@ function SessionPanel({
   session,
   notice,
   isBusy,
+  liveState,
   onCreateSession,
   onRefreshSession,
   onAbandonSession
@@ -557,6 +652,7 @@ function SessionPanel({
   session: ConversationSessionResponse | null;
   notice: string | null;
   isBusy: boolean;
+  liveState: RealtimeConnectionState;
   onCreateSession: () => void;
   onRefreshSession: () => void;
   onAbandonSession: () => void;
@@ -565,7 +661,12 @@ function SessionPanel({
     <section className="panel" aria-label="Сессия разговора">
       <div className="panel-header">
         <h2>Сессия</h2>
-        {isBusy ? <span className="inline-status">запрос</span> : null}
+        <div className="status-row">
+          <span className={liveState.status === "connected" ? "inline-status inline-status--good" : "inline-status"}>
+            {translateLiveStatus(liveState.status)}
+          </span>
+          {isBusy ? <span className="inline-status">запрос</span> : null}
+        </div>
       </div>
       <dl className="metric-grid">
         <Metric label="ID сессии" value={session?.sessionId ?? "нет"} />
@@ -584,6 +685,30 @@ function SessionPanel({
           Отменить сессию
         </button>
       </div>
+    </section>
+  );
+}
+
+function LiveEventsPanel({ events }: { events: ConversationRealtimeEvent[] }) {
+  return (
+    <section className="panel" aria-labelledby="live-events-title">
+      <div className="panel-header">
+        <h2 id="live-events-title">Живые события</h2>
+        <span className="inline-status">{events.length}</span>
+      </div>
+      {events.length === 0 ? (
+        <p className="state-message">Нет live событий</p>
+      ) : (
+        <ul className="live-event-list">
+          {events.map((conversationEvent) => (
+            <li key={conversationEvent.eventId}>
+              <strong>{conversationEvent.type}</strong>
+              <span>{conversationEvent.message}</span>
+              <em>v{conversationEvent.version}</em>
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }
@@ -863,6 +988,23 @@ function translateSessionStatus(status: string | undefined): string {
       return "отменена";
     default:
       return status ?? "нет";
+  }
+}
+
+function translateLiveStatus(status: RealtimeConnectionState["status"]): string {
+  switch (status) {
+    case "connecting":
+      return "подключение";
+    case "connected":
+      return "live подключено";
+    case "reconnecting":
+      return "reconnect";
+    case "disconnected":
+      return "live отключено";
+    case "error":
+      return "live ошибка";
+    default:
+      return "live ожидание";
   }
 }
 

@@ -27,13 +27,13 @@
 
 **Interfaces:**
 - Consumes future hub path `/hubs/conversation`.
-- Consumes future client event name `conversationEvent`.
+- Consumes future typed client event name `ConversationEvent`.
 - Produces failing tests for hub connection, session group join, and update event delivery.
 
-- [ ] Add `Microsoft.AspNetCore.SignalR.Client` test package reference.
-- [ ] Write `ConnectsToConversationHub` using `HubConnectionBuilder`.
-- [ ] Write `JoinedSessionReceivesRegistrationStateChangedEventAfterUpdate`.
-- [ ] Run `dotnet test Hfu.VoiceRegistration.sln` and verify RED because `/hubs/conversation` is not mapped yet.
+- [x] Add `Microsoft.AspNetCore.SignalR.Client` test package reference.
+- [x] Write `ConnectsToConversationHub` using `HubConnectionBuilder`.
+- [x] Write `JoinedSessionReceivesRegistrationStateChangedEventAfterUpdate`.
+- [x] Run `dotnet test Hfu.VoiceRegistration.sln` and verify RED because `/hubs/conversation` is not mapped yet.
 
 ### Task 2: Backend SignalR Hub GREEN
 
@@ -54,13 +54,13 @@
 - Produces `IConversationRealtimeClient.ConversationEvent(ConversationRealtimeEvent conversationEvent)`.
 - Produces `IConversationRealtimeNotifier.NotifyAsync(Guid sessionId, long version, ConversationRealtimeEventType type, string message, CancellationToken cancellationToken, string? correlationId = null)`.
 
-- [ ] Implement typed event records and enum.
-- [ ] Implement group helper `ConversationHubGroups.ForSession(Guid sessionId)`.
-- [ ] Implement `ConversationHub`.
-- [ ] Register SignalR and notifier in `Program.cs`.
-- [ ] Map `/hubs/conversation`.
-- [ ] Publish events after create, abandon, update, confirm, mark clarification, clear, get state, and complete actions.
-- [ ] Run backend SignalR tests and verify GREEN.
+- [x] Implement typed event records and enum.
+- [x] Implement group helper `ConversationHubGroups.ForSession(Guid sessionId)`.
+- [x] Implement `ConversationHub`.
+- [x] Register SignalR and notifier in `Program.cs`.
+- [x] Map `/hubs/conversation`.
+- [x] Publish events after create, abandon, update, confirm, mark clarification, clear, get state, and complete actions.
+- [x] Run backend SignalR tests and verify GREEN.
 
 ### Task 3: Frontend SignalR Client Tests RED
 
@@ -75,12 +75,12 @@
 - Consumes `@microsoft/signalr`.
 - Produces `createConversationRealtimeClient(options)` with `connect`, `joinSession`, `leaveSession`, `onEvent`, `onStatusChange`, and `stop`.
 
-- [ ] Install `@microsoft/signalr`.
-- [ ] Write failing tests with mocked SignalR builder.
-- [ ] Verify hub URL is `/hubs/conversation` by default and uses `VITE_API_BASE_URL` when provided.
-- [ ] Verify `JoinSession` and `LeaveSession` invoke matching hub methods.
-- [ ] Verify `conversationEvent` handler forwards typed events.
-- [ ] Run `npm.cmd test -- src/api/conversationRealtimeClient.test.ts --run` and verify RED.
+- [x] Install `@microsoft/signalr`.
+- [x] Write failing tests with mocked SignalR builder.
+- [x] Verify hub URL is `/hubs/conversation` by default and uses `VITE_API_BASE_URL` when provided.
+- [x] Verify `JoinSession` and `LeaveSession` invoke matching hub methods.
+- [x] Verify `ConversationEvent` handler forwards typed events.
+- [x] Run `npm.cmd test -- src/api/conversationRealtimeClient.test.ts --run` and verify RED.
 
 ### Task 4: Frontend SignalR Client GREEN
 
@@ -93,11 +93,11 @@
 - Produces typed realtime client wrapper.
 - Extends Vite proxy to `/hubs`.
 
-- [ ] Implement frontend realtime event types.
-- [ ] Implement SignalR wrapper with automatic reconnect.
-- [ ] Implement status callbacks for connecting, connected, reconnecting, disconnected, and error.
-- [ ] Add Vite proxy for `/hubs`.
-- [ ] Run frontend realtime client tests and verify GREEN.
+- [x] Implement frontend realtime event types.
+- [x] Implement SignalR wrapper with automatic reconnect.
+- [x] Implement status callbacks for connecting, connected, reconnecting, disconnected, and error.
+- [x] Add Vite proxy for `/hubs`.
+- [x] Run frontend realtime client tests and verify GREEN.
 
 ### Task 5: App Live Updates Tests RED
 
@@ -108,11 +108,11 @@
 - Consumes `createConversationRealtimeClient`.
 - Produces failing tests for UI live status, event list, join session, and HTTP refresh after live event.
 
-- [ ] Mock `conversationRealtimeClient`.
-- [ ] Write failing test that creating a session joins the SignalR session group and shows `live подключено`.
-- [ ] Write failing test that receiving `RegistrationStateChanged` appends a developer event and calls `GET /api/conversation-sessions/{sessionId}`.
-- [ ] Write failing test that restoring a session rejoins the session group.
-- [ ] Run `npm.cmd test -- src/App.test.tsx --run` and verify RED.
+- [x] Mock `conversationRealtimeClient`.
+- [x] Write failing test that creating a session joins the SignalR session group and shows `live подключено`.
+- [x] Write failing test that receiving `RegistrationStateChanged` appends a developer event and calls `GET /api/conversation-sessions/{sessionId}`.
+- [x] Write failing test that restoring a session rejoins the session group.
+- [x] Run `npm.cmd test -- src/App.test.tsx --run` and verify RED.
 
 ### Task 6: App Live Updates GREEN
 
@@ -124,13 +124,13 @@
 - Consumes frontend realtime client wrapper.
 - Produces visible live status and compact developer live event list.
 
-- [ ] Add live connection state to `App`.
-- [ ] Connect SignalR once per app lifecycle.
-- [ ] Join current session after create/restore and leave previous session when switching.
-- [ ] Rejoin and HTTP-refresh after reconnect.
-- [ ] Append received events and refresh full state through `getConversationSession`.
-- [ ] Display live status and recent event list with Russian labels.
-- [ ] Run `npm.cmd test -- src/App.test.tsx --run` and verify GREEN.
+- [x] Add live connection state to `App`.
+- [x] Connect SignalR once per app lifecycle.
+- [x] Join current session after create/restore and leave previous session when switching.
+- [x] Rejoin and HTTP-refresh after reconnect.
+- [x] Append received events and refresh full state through `getConversationSession`.
+- [x] Display live status and recent event list with Russian labels.
+- [x] Run `npm.cmd test -- src/App.test.tsx --run` and verify GREEN.
 
 ### Task 7: Documentation, Verification, And Commit
 
@@ -143,10 +143,10 @@
 **Interfaces:**
 - Documents Stage 9 behavior and manual testing.
 
-- [ ] Update docs to mark Stage 9 implemented and OpenAI/WebRTC still deferred.
-- [ ] Run `dotnet build Hfu.VoiceRegistration.sln`.
-- [ ] Run `dotnet test Hfu.VoiceRegistration.sln`.
-- [ ] Run `npm.cmd test -- --run`.
-- [ ] Run `npm.cmd run build`.
-- [ ] Start local API and frontend dev servers and visually verify live status/event refresh.
-- [ ] Commit with message `feat: add stage 9 signalr live updates`.
+- [x] Update docs to mark Stage 9 implemented and OpenAI/WebRTC still deferred.
+- [x] Run `dotnet build Hfu.VoiceRegistration.sln`.
+- [x] Run `dotnet test Hfu.VoiceRegistration.sln`.
+- [x] Run `npm.cmd test -- --run`.
+- [x] Run `npm.cmd run build`.
+- [x] Start local API and frontend dev servers and visually verify live status/event refresh.
+- [x] Commit with message `feat: add stage 9 signalr live updates`.

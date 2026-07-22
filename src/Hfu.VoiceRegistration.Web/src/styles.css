@@ -137,7 +137,7 @@ h3 {
 }
 
 .layout-grid--wide {
-  grid-template-columns: minmax(0, 1.5fr) minmax(280px, 0.8fr) minmax(280px, 0.8fr);
+  grid-template-columns: minmax(0, 1.45fr) minmax(260px, 0.75fr) minmax(260px, 0.75fr) minmax(280px, 0.85fr);
   align-items: start;
 }
 
@@ -200,6 +200,13 @@ h3 {
   border: 1px solid #c9d2dc;
   background: #f6f8fa;
   color: #556272;
+}
+
+.status-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
 }
 
 .metric-grid,
@@ -438,12 +445,18 @@ dd {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  min-width: 0;
 }
 
 .token {
+  max-width: 100%;
+  min-width: 0;
   padding: 4px 8px;
   background: #eef6ff;
   color: #225b91;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .muted {
@@ -477,6 +490,39 @@ dd {
   color: #5b6878;
   font-size: 0.86rem;
   font-style: normal;
+}
+
+.live-event-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 16px;
+  list-style: none;
+}
+
+.live-event-list li {
+  display: grid;
+  gap: 5px;
+  padding: 10px;
+  border: 1px solid #d5dde5;
+  border-radius: 6px;
+  background: #fbfcfd;
+}
+
+.live-event-list strong,
+.live-event-list em {
+  overflow-wrap: anywhere;
+  color: #267f86;
+  font-size: 0.78rem;
+  font-style: normal;
+  font-weight: 850;
+}
+
+.live-event-list span {
+  overflow-wrap: anywhere;
+  color: #4c5969;
+  font-size: 0.86rem;
+  line-height: 1.35;
 }
 
 @media (max-width: 1120px) {

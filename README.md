@@ -1,6 +1,6 @@
 # Hfu.VoiceRegistration
 
-External advertising PoC for HFU voice-assisted registration. The current implementation contains the Stage 1 runnable skeleton, Stage 2 pure domain model, Stage 3 in-memory conversation session management, Stage 4 application-level backend registration tools, Stage 5 reference data for region matching, Stage 6 fake HFU registration completion, Stage 7 backend HTTP API, and Stage 8 React UI without voice.
+External advertising PoC for HFU voice-assisted registration. The current implementation contains the Stage 1 runnable skeleton, Stage 2 pure domain model, Stage 3 in-memory conversation session management, Stage 4 application-level backend registration tools, Stage 5 reference data for region matching, Stage 6 fake HFU registration completion, Stage 7 backend HTTP API, Stage 8 React UI without voice, and Stage 9 SignalR live updates.
 
 This PoC is not intended to process real personal data. Do not enter real user registration details into local demos.
 
@@ -170,7 +170,7 @@ Frontend URL:
 http://127.0.0.1:5173
 ```
 
-The Vite dev server proxies `/health` and `/api` to `http://localhost:5076`.
+The Vite dev server proxies `/health`, `/api`, and `/hubs` to `http://localhost:5076`.
 
 Stage 8 frontend capabilities:
 
@@ -178,6 +178,13 @@ Stage 8 frontend capabilities:
 - displays backend registration state, field statuses, completion issues, and structured tool errors;
 - provides a manual demo/developer tool emulator for update, confirm, clarification, clear, state refresh, and completion;
 - shows the fake HFU registration result when completion succeeds.
+
+Stage 9 realtime capabilities:
+
+- connects the browser to the backend SignalR hub at `/hubs/conversation`;
+- joins the current conversation session group after create/restore and rejoins after reconnect;
+- displays compact live connection status and recent backend events;
+- refreshes full session state through HTTP after live events, keeping HTTP/backend state authoritative.
 
 For manual UI testing, run the API first, then run the frontend and open `http://127.0.0.1:5173`.
 
@@ -215,9 +222,8 @@ No OpenAI API key is required yet.
 
 These are intentionally not implemented yet:
 
-- SignalR live updates
 - OpenAI client or Realtime API
-- WebRTC
+- WebRTC, microphone capture, audio playback, or transcript UI
 - OpenAI tool-call bridge
-- EF Core, database packages, Redis, or persistent storage
+- EF Core, database packages, Redis/backplane, or persistent storage
 - production HFU integration

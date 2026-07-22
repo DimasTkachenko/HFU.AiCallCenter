@@ -1,4 +1,5 @@
 using Hfu.VoiceRegistration.Api.Contracts;
+using Hfu.VoiceRegistration.Api.Realtime;
 using Hfu.VoiceRegistration.Application.Conversations;
 using Hfu.VoiceRegistration.Application.RegistrationTools;
 using Hfu.VoiceRegistration.Domain.Conversations;
@@ -31,6 +32,7 @@ public static class ConversationSessionEndpoints
     private static async Task<IResult> CreateSessionAsync(
         IConversationSessionStore store,
         IRegistrationToolService registrationTools,
+        IConversationRealtimeNotifier realtimeNotifier,
         TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
@@ -43,6 +45,12 @@ public static class ConversationSessionEndpoints
             cancellationToken);
 
         var response = ApiContractMapper.ToResponse(session, toolResult.State!);
+        await realtimeNotifier.NotifyAsync(
+            session.SessionId,
+            session.Version,
+            ConversationRealtimeEventType.SessionCreated,
+            "Conversation session created.",
+            cancellationToken);
 
         return Results.Created(
             $"/api/conversation-sessions/{session.SessionId}",
@@ -72,6 +80,7 @@ public static class ConversationSessionEndpoints
         Guid sessionId,
         IConversationSessionStore store,
         IRegistrationToolService registrationTools,
+        IConversationRealtimeNotifier realtimeNotifier,
         TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
@@ -109,6 +118,12 @@ public static class ConversationSessionEndpoints
 
         var toolResult = await registrationTools.GetRegistrationStateAsync(
             sessionId,
+            cancellationToken);
+        await realtimeNotifier.NotifyAsync(
+            sessionId,
+            updated.Version,
+            ConversationRealtimeEventType.SessionAbandoned,
+            "Conversation session abandoned.",
             cancellationToken);
 
         return Results.Ok(ApiContractMapper.ToResponse(updated, toolResult.State!));

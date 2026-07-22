@@ -2,14 +2,69 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
+import type {
+  ConversationRealtimeEvent,
+  RealtimeConnectionState
+} from "./api/realtimeTypes";
 
 const sessionId = "11111111-1111-1111-1111-111111111111";
+
+const realtimeClientMock = vi.hoisted(() => {
+  const eventHandlers = new Set<(conversationEvent: ConversationRealtimeEvent) => void>();
+  const statusHandlers = new Set<(state: RealtimeConnectionState) => void>();
+  const client = {
+    connect: vi.fn(async () => {
+      for (const handler of statusHandlers) {
+        handler({ status: "connected" });
+      }
+    }),
+    joinSession: vi.fn(async () => undefined),
+    leaveSession: vi.fn(async () => undefined),
+    onEvent: vi.fn((handler: (conversationEvent: ConversationRealtimeEvent) => void) => {
+      eventHandlers.add(handler);
+
+      return () => eventHandlers.delete(handler);
+    }),
+    onStatusChange: vi.fn((handler: (state: RealtimeConnectionState) => void) => {
+      statusHandlers.add(handler);
+
+      return () => statusHandlers.delete(handler);
+    }),
+    stop: vi.fn(async () => undefined)
+  };
+
+  return {
+    client,
+    createConversationRealtimeClient: vi.fn(() => client),
+    emitEvent(conversationEvent: ConversationRealtimeEvent) {
+      for (const handler of eventHandlers) {
+        handler(conversationEvent);
+      }
+    },
+    reset() {
+      eventHandlers.clear();
+      statusHandlers.clear();
+      client.connect.mockClear();
+      client.joinSession.mockClear();
+      client.leaveSession.mockClear();
+      client.onEvent.mockClear();
+      client.onStatusChange.mockClear();
+      client.stop.mockClear();
+      this.createConversationRealtimeClient.mockClear();
+    }
+  };
+});
+
+vi.mock("./api/conversationRealtimeClient", () => ({
+  createConversationRealtimeClient: realtimeClientMock.createConversationRealtimeClient
+}));
 
 describe("App", () => {
   afterEach(() => {
     cleanup();
     localStorage.clear();
     vi.unstubAllGlobals();
+    realtimeClientMock.reset();
   });
 
   it("creates a session and stores it for refresh recovery", async () => {
@@ -26,6 +81,24 @@ describe("App", () => {
 
     expect(await screen.findByText(sessionId)).toBeInTheDocument();
     expect(localStorage.getItem("hfu.voiceRegistration.sessionId")).toBe(sessionId);
+  });
+
+  it("connects live updates and joins the session group after creating a session", async () => {
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        "POST /api/conversation-sessions": sessionResponse()
+      })
+    );
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Создать сессию" }));
+
+    expect(await screen.findByText(sessionId)).toBeInTheDocument();
+    expect(realtimeClientMock.client.connect).toHaveBeenCalled();
+    expect(realtimeClientMock.client.joinSession).toHaveBeenCalledWith(sessionId);
+    expect(await screen.findByText("live подключено")).toBeInTheDocument();
   });
 
   it("restores a saved session on page load", async () => {
@@ -46,6 +119,55 @@ describe("App", () => {
 
     expect(await screen.findByText("Сессия восстановлена")).toBeInTheDocument();
     expect(screen.getByText("Dimas")).toBeInTheDocument();
+  });
+
+  it("rejoins the live session group when restoring a saved session", async () => {
+    localStorage.setItem("hfu.voiceRegistration.sessionId", sessionId);
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        [`GET /api/conversation-sessions/${sessionId}`]: sessionResponse({
+          status: "Active"
+        })
+      })
+    );
+
+    render(<App />);
+
+    expect(await screen.findByText("Сессия восстановлена")).toBeInTheDocument();
+    expect(realtimeClientMock.client.joinSession).toHaveBeenCalledWith(sessionId);
+  });
+
+  it("refreshes session state through HTTP after receiving a live event", async () => {
+    const fetchMock = createFetchMock({
+      "POST /api/conversation-sessions": sessionResponse(),
+      [`GET /api/conversation-sessions/${sessionId}`]: sessionResponse({
+        status: "Active",
+        version: 3,
+        state: stateWithFields([
+          field("firstName", "Live", "Captured")
+        ])
+      })
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Создать сессию" }));
+    await screen.findByText(sessionId);
+    realtimeClientMock.emitEvent(liveEvent({
+      type: "RegistrationStateChanged",
+      message: "Registration state changed."
+    }));
+
+    expect(await screen.findByText("Registration state changed.")).toBeInTheDocument();
+    expect(await screen.findByText("Live")).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/conversation-sessions/${sessionId}`,
+      expect.objectContaining({
+        headers: expect.any(Object)
+      })
+    );
   });
 
   it("renders Ukrainian region reference values", async () => {
@@ -256,5 +378,18 @@ function completion() {
       registrationId: "DEMO-2026-000001",
       completedAt: "2026-07-22T12:05:00Z"
     }
+  };
+}
+
+function liveEvent(overrides: Partial<ConversationRealtimeEvent> = {}): ConversationRealtimeEvent {
+  return {
+    eventId: "22222222-2222-2222-2222-222222222222",
+    sessionId,
+    version: 2,
+    type: "RegistrationStateChanged",
+    message: "Registration state changed.",
+    occurredAtUtc: "2026-07-22T12:01:00Z",
+    correlationId: null,
+    ...overrides
   };
 }

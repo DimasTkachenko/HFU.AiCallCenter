@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using Hfu.VoiceRegistration.Api.Endpoints;
+using Hfu.VoiceRegistration.Api.Realtime;
 using Hfu.VoiceRegistration.Application;
 using Hfu.VoiceRegistration.Infrastructure;
 
@@ -10,6 +11,13 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services
+    .AddSignalR()
+    .AddJsonProtocol(options =>
+    {
+        options.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+    });
+builder.Services.AddSingleton<IConversationRealtimeNotifier, SignalRConversationRealtimeNotifier>();
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 
@@ -32,6 +40,7 @@ app.MapGet("/health", () =>
 app.MapConversationSessionEndpoints();
 app.MapRegistrationToolEndpoints();
 app.MapReferenceDataEndpoints();
+app.MapHub<ConversationHub>("/hubs/conversation");
 
 app.Run();
 
