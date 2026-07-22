@@ -1,6 +1,6 @@
 # Hfu.VoiceRegistration
 
-External advertising PoC for HFU voice-assisted registration. The current implementation contains the Stage 1 runnable skeleton, Stage 2 pure domain model, Stage 3 in-memory conversation session management, and Stage 4 application-level backend registration tools.
+External advertising PoC for HFU voice-assisted registration. The current implementation contains the Stage 1 runnable skeleton, Stage 2 pure domain model, Stage 3 in-memory conversation session management, Stage 4 application-level backend registration tools, and Stage 5 reference data for region matching.
 
 This PoC is not intended to process real personal data. Do not enter real user registration details into local demos.
 
@@ -101,6 +101,18 @@ The tools update the server-owned `RegistrationDraft` through `IConversationSess
 
 This stage does not add HTTP endpoints or OpenAI integration. The future tool-call bridge should call this application service instead of editing registration state directly.
 
+## Reference Data
+
+Stage 5 adds application-level Ukrainian region reference data:
+
+- canonical region names are stored in Ukrainian;
+- Russian and Ukrainian aliases are accepted for matching;
+- internal region IDs are kept server-side and are not accepted as model-provided aliases;
+- ambiguous or unknown region values mark the affected field as `NeedsClarification`;
+- `RegistrationToolResult` returns `RegionAmbiguous` or `RegionNotFound` with Ukrainian suggestions when available.
+
+The resolver is integrated into `update_registration_fields` for `currentRegion` and `regionBeforeWar`. HTTP reference data endpoints are still deferred to the backend HTTP API stage.
+
 ## Frontend
 
 Install dependencies:
@@ -163,6 +175,7 @@ These are intentionally not implemented yet:
 - OpenAI client or Realtime API
 - WebRTC
 - OpenAI tool-call bridge
+- HTTP reference data endpoint
 - final `complete_registration` submission flow
 - EF Core, database packages, Redis, or persistent storage
 - production HFU integration

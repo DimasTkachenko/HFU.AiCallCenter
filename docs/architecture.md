@@ -70,6 +70,16 @@ The service validates field names and values server-side before mutating state. 
 
 Stage 4 deliberately does not expose HTTP endpoints, call OpenAI, or submit final registrations. The actual `complete_registration` flow remains deferred until fake HFU registration and API stages.
 
+## Stage 5 Reference Data
+
+`Hfu.VoiceRegistration.Application.ReferenceData` owns the current in-memory Ukrainian region catalog and `IRegionResolver`.
+
+Canonical region display names are Ukrainian. The resolver accepts Ukrainian and Russian aliases, normalizes case and spacing, and never treats internal region IDs as aliases supplied by the model. `update_registration_fields` uses this resolver for `currentRegion` and `regionBeforeWar`.
+
+Resolved regions are stored in the draft as Ukrainian canonical names plus a server-owned `ReferenceId`. Ambiguous or unknown regions are persisted as `NeedsClarification` with the raw value and clarification reason; the tool result returns `RegionAmbiguous` or `RegionNotFound` so a future voice assistant can ask a focused follow-up question.
+
+Stage 5 still avoids HTTP reference data endpoints. Those belong to the backend HTTP API stage.
+
 ## Future Voice Architecture
 
 ```mermaid
@@ -104,4 +114,4 @@ Registration logic must not depend directly on browser WebRTC. A later SIP/IP te
 
 ## Current Non-Goals
 
-The current implementation does not include OpenAI, WebRTC, SignalR, fake HFU registration, final registration submission, databases, Redis, HTTP registration APIs, or production HFU integration.
+The current implementation does not include OpenAI, WebRTC, SignalR, fake HFU registration, final registration submission, databases, Redis, HTTP registration APIs, HTTP reference data endpoints, or production HFU integration.

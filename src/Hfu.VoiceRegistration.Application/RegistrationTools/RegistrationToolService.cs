@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Net.Mail;
 using System.Text.Json;
 using Hfu.VoiceRegistration.Application.Conversations;
+using Hfu.VoiceRegistration.Application.ReferenceData;
 using Hfu.VoiceRegistration.Domain.Conversations;
 using Hfu.VoiceRegistration.Domain.Registration;
 
@@ -16,14 +17,18 @@ public sealed class RegistrationToolService : IRegistrationToolService
 
     private readonly IConversationSessionStore _store;
     private readonly TimeProvider _timeProvider;
+    private readonly IRegionResolver _regionResolver;
     private readonly RegistrationFieldRegistry _fieldRegistry;
 
     public RegistrationToolService(
         IConversationSessionStore store,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        IRegionResolver? regionResolver = null)
     {
         _store = store;
         _timeProvider = timeProvider;
+        _regionResolver = regionResolver
+            ?? new RegionResolver(new UkrainianRegionReferenceDataProvider());
         _fieldRegistry = RegistrationFieldRegistry.Instance;
     }
 
@@ -51,28 +56,45 @@ public sealed class RegistrationToolService : IRegistrationToolService
             {
                 var context = CreateConversionContext();
                 var draft = current.RegistrationDraft;
-                var errors = new List<RegistrationToolError>();
+                var hardErrors = new List<RegistrationToolError>();
+                var handledErrors = new List<RegistrationToolError>();
 
                 foreach (var update in fields)
                 {
                     if (!_fieldRegistry.TryGet(update.Name, out var field))
                     {
-                        errors.Add(UnknownField(update.Name));
+                        hardErrors.Add(UnknownField(update.Name));
                         continue;
                     }
 
                     var updateResult = field.Update(draft, update, context);
                     if (updateResult.Error is not null)
                     {
-                        errors.Add(updateResult.Error);
-                        continue;
+                        if (updateResult.ShouldPersist)
+                        {
+                            handledErrors.Add(updateResult.Error);
+                        }
+                        else
+                        {
+                            hardErrors.Add(updateResult.Error);
+                            continue;
+                        }
                     }
 
                     draft = updateResult.Draft;
                 }
 
-                return errors.Count > 0
-                    ? ToolMutation.Invalid(current, errors)
+                if (hardErrors.Count > 0)
+                {
+                    return ToolMutation.Invalid(current, hardErrors);
+                }
+
+                return handledErrors.Count > 0
+                    ? ToolMutation.ValidWithErrors(
+                        draft,
+                        FieldNeedsClarificationEventType,
+                        $"Updated {fields.Count} registration field(s) with clarification required.",
+                        handledErrors)
                     : ToolMutation.Valid(draft, FieldUpdatedEventType, $"Updated {fields.Count} registration field(s).");
             },
             cancellationToken);
@@ -228,6 +250,7 @@ public sealed class RegistrationToolService : IRegistrationToolService
     {
         try
         {
+            IReadOnlyList<RegistrationToolError> mutationErrors = Array.Empty<RegistrationToolError>();
             var updated = await _store.UpdateAsync(
                 sessionId,
                 (current, _) =>
@@ -240,6 +263,7 @@ public sealed class RegistrationToolService : IRegistrationToolService
                             mutation.Errors);
                     }
 
+                    mutationErrors = mutation.Errors;
                     var now = _timeProvider.GetUtcNow();
                     var activeSession = current with
                     {
@@ -255,7 +279,10 @@ public sealed class RegistrationToolService : IRegistrationToolService
                 },
                 cancellationToken);
 
-            return RegistrationToolResult.Success(CreateState(updated));
+            var resultState = CreateState(updated);
+            return mutationErrors.Count == 0
+                ? RegistrationToolResult.Success(resultState)
+                : RegistrationToolResult.Failure(resultState, mutationErrors);
         }
         catch (KeyNotFoundException)
         {
@@ -341,7 +368,7 @@ public sealed class RegistrationToolService : IRegistrationToolService
     private RegistrationToolConversionContext CreateConversionContext()
     {
         var today = DateOnly.FromDateTime(_timeProvider.GetUtcNow().UtcDateTime);
-        return new RegistrationToolConversionContext(today);
+        return new RegistrationToolConversionContext(today, _regionResolver);
     }
 
     private static RegistrationToolError UnknownField(string? fieldName)
@@ -367,6 +394,15 @@ public sealed class RegistrationToolService : IRegistrationToolService
             return new ToolMutation(true, draft, eventType, eventMessage, Array.Empty<RegistrationToolError>());
         }
 
+        public static ToolMutation ValidWithErrors(
+            RegistrationDraft draft,
+            string eventType,
+            string eventMessage,
+            IReadOnlyList<RegistrationToolError> errors)
+        {
+            return new ToolMutation(true, draft, eventType, eventMessage, errors);
+        }
+
         public static ToolMutation Invalid(
             ConversationSession session,
             IReadOnlyList<RegistrationToolError> errors)
@@ -390,7 +426,9 @@ public sealed class RegistrationToolService : IRegistrationToolService
         public IReadOnlyList<RegistrationToolError> Errors { get; }
     }
 
-    private sealed record RegistrationToolConversionContext(DateOnly Today);
+    private sealed record RegistrationToolConversionContext(
+        DateOnly Today,
+        IRegionResolver RegionResolver);
 
     private sealed class RegistrationFieldRegistry
     {
@@ -417,7 +455,7 @@ public sealed class RegistrationToolService : IRegistrationToolService
                 DateField(),
                 PhoneField(),
                 EmailField(),
-                StringField(
+                RegionField(
                     RegistrationFieldNames.CurrentRegion,
                     draft => draft.CurrentRegion,
                     (draft, field) => draft with { CurrentRegion = field }),
@@ -430,7 +468,7 @@ public sealed class RegistrationToolService : IRegistrationToolService
                     draft => draft.ActualAddress,
                     (draft, field) => draft with { ActualAddress = field }),
                 UserCategoryField(),
-                StringField(
+                RegionField(
                     RegistrationFieldNames.RegionBeforeWar,
                     draft => draft.RegionBeforeWar,
                     (draft, field) => draft with { RegionBeforeWar = field }),
@@ -495,7 +533,7 @@ public sealed class RegistrationToolService : IRegistrationToolService
                 RegistrationFieldNames.DateOfBirth,
                 draft => draft.DateOfBirth,
                 (draft, field) => draft with { DateOfBirth = field },
-                static (value, context) =>
+                (value, context) =>
                 {
                     if (value is DateOnly date)
                     {
@@ -515,6 +553,53 @@ public sealed class RegistrationToolService : IRegistrationToolService
                     }
 
                     return ValidateBirthDate(date, context);
+                });
+        }
+
+        private static RegistrationFieldDefinition<string> RegionField(
+            string name,
+            Func<RegistrationDraft, RegistrationField<string>> get,
+            Func<RegistrationDraft, RegistrationField<string>, RegistrationDraft> set)
+        {
+            return new RegistrationFieldDefinition<string>(
+                name,
+                get,
+                set,
+                (value, context) =>
+                {
+                    if (!TryGetString(value, out var text))
+                    {
+                        return FieldConversion<string>.Invalid("Region value must be a non-empty string.");
+                    }
+
+                    var rawValue = text.Trim();
+                    if (string.IsNullOrWhiteSpace(rawValue))
+                    {
+                        return FieldConversion<string>.Invalid("Region value must be a non-empty string.");
+                    }
+
+                    var resolution = context.RegionResolver.Resolve(rawValue);
+                    return resolution.Status switch
+                    {
+                        RegionResolutionStatus.Resolved => FieldConversion<string>.Valid(
+                            resolution.Region!.Name,
+                            resolution.Region.Id),
+                        RegionResolutionStatus.Ambiguous => FieldConversion<string>.ClarificationRequired(
+                            rawValue,
+                            "Region match is ambiguous and needs clarification.",
+                            new RegistrationToolError(
+                                RegistrationToolErrorCodes.RegionAmbiguous,
+                                name,
+                                "Region value is ambiguous.",
+                                resolution.Suggestions.Select(region => region.Name).ToArray())),
+                        _ => FieldConversion<string>.ClarificationRequired(
+                            rawValue,
+                            "Region was not found in reference data.",
+                            new RegistrationToolError(
+                                RegistrationToolErrorCodes.RegionNotFound,
+                                name,
+                                "Region value was not found in reference data."))
+                    };
                 });
         }
 
@@ -790,7 +875,8 @@ public sealed class RegistrationToolService : IRegistrationToolService
                     field.Value,
                     field.RawValue,
                     field.Status,
-                    field.ClarificationReason);
+                    field.ClarificationReason,
+                    field.ReferenceId);
             }
 
             public FieldOperationResult Update(
@@ -799,6 +885,17 @@ public sealed class RegistrationToolService : IRegistrationToolService
                 RegistrationToolConversionContext context)
             {
                 var conversion = _convert(update.Value, context);
+                if (conversion.NeedsClarification)
+                {
+                    return FieldOperationResult.Handled(_set(
+                        draft,
+                        RegistrationField<T>.NeedsClarification(
+                            default,
+                            update.RawValue ?? conversion.RawValue ?? ToRawValue(update.Value),
+                            conversion.ClarificationReason)),
+                        conversion.Error!);
+                }
+
                 if (!conversion.Succeeded)
                 {
                     return FieldOperationResult.Invalid(InvalidValue(Name, conversion.ErrorMessage));
@@ -806,7 +903,10 @@ public sealed class RegistrationToolService : IRegistrationToolService
 
                 return FieldOperationResult.Valid(_set(
                     draft,
-                    RegistrationField<T>.Captured(conversion.Value, update.RawValue ?? ToRawValue(update.Value))));
+                    RegistrationField<T>.Captured(
+                        conversion.Value,
+                        update.RawValue ?? ToRawValue(update.Value),
+                        conversion.ReferenceId)));
             }
 
             public FieldOperationResult Confirm(RegistrationDraft draft)
@@ -822,7 +922,7 @@ public sealed class RegistrationToolService : IRegistrationToolService
 
                 return FieldOperationResult.Valid(_set(
                     draft,
-                    RegistrationField<T>.Confirmed(field.Value!, field.RawValue)));
+                    RegistrationField<T>.Confirmed(field.Value!, field.RawValue, field.ReferenceId)));
             }
 
             public FieldOperationResult MarkNeedsClarification(
@@ -835,7 +935,8 @@ public sealed class RegistrationToolService : IRegistrationToolService
                     RegistrationField<T>.NeedsClarification(
                         field.Value,
                         field.RawValue,
-                        string.IsNullOrWhiteSpace(reason) ? null : reason.Trim())));
+                        string.IsNullOrWhiteSpace(reason) ? null : reason.Trim(),
+                        field.ReferenceId)));
             }
 
             public FieldOperationResult Clear(RegistrationDraft draft)
@@ -879,6 +980,7 @@ public sealed class RegistrationToolService : IRegistrationToolService
                     value,
                     null,
                     value ? RegistrationFieldStatus.Confirmed : RegistrationFieldStatus.Missing,
+                    null,
                     null);
             }
 
@@ -998,32 +1100,79 @@ public sealed class RegistrationToolService : IRegistrationToolService
 
     private sealed record FieldOperationResult(
         RegistrationDraft Draft,
-        RegistrationToolError? Error)
+        RegistrationToolError? Error,
+        bool ShouldPersist)
     {
         public static FieldOperationResult Valid(RegistrationDraft draft)
         {
-            return new FieldOperationResult(draft, null);
+            return new FieldOperationResult(draft, null, true);
+        }
+
+        public static FieldOperationResult Handled(
+            RegistrationDraft draft,
+            RegistrationToolError error)
+        {
+            return new FieldOperationResult(draft, error, true);
         }
 
         public static FieldOperationResult Invalid(RegistrationToolError error)
         {
-            return new FieldOperationResult(RegistrationDraft.Create(), error);
+            return new FieldOperationResult(RegistrationDraft.Create(), error, false);
         }
     }
 
     private sealed record FieldConversion<T>(
         bool Succeeded,
+        bool NeedsClarification,
         T Value,
-        string ErrorMessage)
+        string ErrorMessage,
+        string? ReferenceId,
+        string? RawValue,
+        string? ClarificationReason,
+        RegistrationToolError? Error)
     {
-        public static FieldConversion<T> Valid(T value)
+        public static FieldConversion<T> Valid(
+            T value,
+            string? referenceId = null)
         {
-            return new FieldConversion<T>(true, value, string.Empty);
+            return new FieldConversion<T>(
+                true,
+                false,
+                value,
+                string.Empty,
+                referenceId,
+                null,
+                null,
+                null);
         }
 
         public static FieldConversion<T> Invalid(string errorMessage)
         {
-            return new FieldConversion<T>(false, default!, errorMessage);
+            return new FieldConversion<T>(
+                false,
+                false,
+                default!,
+                errorMessage,
+                null,
+                null,
+                null,
+                null);
+        }
+
+        public static FieldConversion<T> ClarificationRequired(
+            string rawValue,
+            string clarificationReason,
+            RegistrationToolError error)
+        {
+            return new FieldConversion<T>(
+                false,
+                true,
+                default!,
+                string.Empty,
+                null,
+                rawValue,
+                clarificationReason,
+                error);
         }
     }
 }

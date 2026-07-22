@@ -7,4 +7,5 @@ public sealed record RegistrationFieldSnapshot(
     object? Value,
     string? RawValue,
     RegistrationFieldStatus Status,
-    string? ClarificationReason);
+    string? ClarificationReason,
+    string? ReferenceId);

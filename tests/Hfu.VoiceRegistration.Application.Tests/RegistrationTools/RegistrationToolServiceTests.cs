@@ -79,6 +79,110 @@ public sealed class RegistrationToolServiceTests
     }
 
     [Fact]
+    public async Task UpdateRegistrationFieldsResolvesRegionAliasesToUkrainianCanonicalNames()
+    {
+        var now = new DateTimeOffset(2026, 7, 22, 10, 0, 0, TimeSpan.Zero);
+        var store = new FakeConversationSessionStore();
+        var session = ConversationSession.Create(now);
+        await store.CreateAsync(session, CancellationToken.None);
+        var service = CreateService(store, now.AddMinutes(1));
+
+        var result = await service.UpdateRegistrationFieldsAsync(
+            session.SessionId,
+            new[]
+            {
+                new RegistrationFieldUpdate(
+                    RegistrationFieldNames.CurrentRegion,
+                    "Харьковская область",
+                    "Харьковская область"),
+                new RegistrationFieldUpdate(
+                    RegistrationFieldNames.RegionBeforeWar,
+                    "Харківська",
+                    "Харківська")
+            },
+            CancellationToken.None);
+
+        var stored = await store.GetAsync(session.SessionId, CancellationToken.None);
+
+        Assert.True(result.Succeeded, FormatErrors(result));
+        Assert.NotNull(stored);
+        Assert.Equal("Харківська область", stored.RegistrationDraft.CurrentRegion.Value);
+        Assert.Equal("hfu-region-kharkivska", stored.RegistrationDraft.CurrentRegion.ReferenceId);
+        Assert.Equal(RegistrationFieldStatus.Captured, stored.RegistrationDraft.CurrentRegion.Status);
+        Assert.Equal("Харківська область", stored.RegistrationDraft.RegionBeforeWar.Value);
+        Assert.Equal("hfu-region-kharkivska", stored.RegistrationDraft.RegionBeforeWar.ReferenceId);
+    }
+
+    [Fact]
+    public async Task UpdateRegistrationFieldsMarksAmbiguousRegionForClarificationWithSuggestions()
+    {
+        var now = new DateTimeOffset(2026, 7, 22, 10, 0, 0, TimeSpan.Zero);
+        var store = new FakeConversationSessionStore();
+        var session = ConversationSession.Create(now);
+        await store.CreateAsync(session, CancellationToken.None);
+        var service = CreateService(store, now.AddMinutes(1));
+
+        var result = await service.UpdateRegistrationFieldsAsync(
+            session.SessionId,
+            new[]
+            {
+                new RegistrationFieldUpdate(RegistrationFieldNames.CurrentRegion, "Київ", "Київ")
+            },
+            CancellationToken.None);
+
+        var stored = await store.GetAsync(session.SessionId, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains(result.Errors, error => error.Code == RegistrationToolErrorCodes.RegionAmbiguous);
+        Assert.Contains(
+            result.Errors.SelectMany(error => error.Suggestions),
+            suggestion => suggestion == "Київська область");
+        Assert.Contains(
+            result.Errors.SelectMany(error => error.Suggestions),
+            suggestion => suggestion == "м. Київ");
+        Assert.NotNull(stored);
+        Assert.Equal(1, stored.Version);
+        Assert.Equal(RegistrationFieldStatus.NeedsClarification, stored.RegistrationDraft.CurrentRegion.Status);
+        Assert.Null(stored.RegistrationDraft.CurrentRegion.Value);
+        Assert.Equal("Київ", stored.RegistrationDraft.CurrentRegion.RawValue);
+        Assert.Contains("ambiguous", stored.RegistrationDraft.CurrentRegion.ClarificationReason);
+        Assert.NotNull(result.State);
+        Assert.Contains(
+            result.State.FieldsRequiringClarification,
+            field => field == RegistrationFieldNames.CurrentRegion);
+    }
+
+    [Fact]
+    public async Task UpdateRegistrationFieldsMarksUnknownRegionForClarificationWithoutAcceptingIds()
+    {
+        var now = new DateTimeOffset(2026, 7, 22, 10, 0, 0, TimeSpan.Zero);
+        var store = new FakeConversationSessionStore();
+        var session = ConversationSession.Create(now);
+        await store.CreateAsync(session, CancellationToken.None);
+        var service = CreateService(store, now.AddMinutes(1));
+
+        var result = await service.UpdateRegistrationFieldsAsync(
+            session.SessionId,
+            new[]
+            {
+                new RegistrationFieldUpdate(
+                    RegistrationFieldNames.CurrentRegion,
+                    "hfu-region-kharkivska",
+                    "hfu-region-kharkivska")
+            },
+            CancellationToken.None);
+
+        var stored = await store.GetAsync(session.SessionId, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains(result.Errors, error => error.Code == RegistrationToolErrorCodes.RegionNotFound);
+        Assert.NotNull(stored);
+        Assert.Equal(RegistrationFieldStatus.NeedsClarification, stored.RegistrationDraft.CurrentRegion.Status);
+        Assert.Null(stored.RegistrationDraft.CurrentRegion.Value);
+        Assert.Equal("hfu-region-kharkivska", stored.RegistrationDraft.CurrentRegion.RawValue);
+    }
+
+    [Fact]
     public async Task ConfirmRegistrationFieldsConfirmsCapturedFields()
     {
         var now = new DateTimeOffset(2026, 7, 22, 10, 0, 0, TimeSpan.Zero);

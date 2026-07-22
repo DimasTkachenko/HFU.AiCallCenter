@@ -214,6 +214,32 @@ Confirmed Stage 4 boundary:
 - defer actual `complete_registration` submission until the fake HFU/API stages;
 - keep `registrationCanBeCompleted` in state so the future completion handler can reuse the existing validation.
 
+Stage 5 was separately requested and implements reference data for regions.
+
+## Stage 5 Scope
+
+Stage 5 implements:
+
+- Ukrainian region reference data;
+- Ukrainian canonical names in stored draft values;
+- Russian and Ukrainian aliases;
+- `IRegionReferenceDataProvider`;
+- `IRegionResolver`;
+- exact and conservative fuzzy matching;
+- `Resolved`, `Ambiguous`, and `NotFound` results;
+- integration with `update_registration_fields` for `currentRegion` and `regionBeforeWar`;
+- structured `RegionAmbiguous` and `RegionNotFound` tool errors;
+- suggestions for ambiguous matches;
+- server-owned `ReferenceId` on registration fields;
+- Application tests for resolver behavior and tool integration.
+
+Confirmed Stage 5 boundary:
+
+- do not add HTTP reference data endpoints until Stage 7;
+- do not add OpenAI SDK, Realtime API, WebRTC, SignalR, fake HFU registration, EF Core, databases, Redis, or production HFU integration;
+- do not accept model-generated region IDs as aliases;
+- ambiguous and unknown regions must be persisted as `NeedsClarification`, not silently ignored.
+
 ## Full Technical Specification Highlights
 
 The full spec describes:
