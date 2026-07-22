@@ -19,7 +19,7 @@ The runtime surface still exposes only `GET /health`. The frontend calls that en
 ## Backend Layers
 
 - `Hfu.VoiceRegistration.Domain`: registration field state, draft model, user categories, conversation session concept, and completion validation. It has no external dependencies.
-- `Hfu.VoiceRegistration.Application`: future use cases and contracts. It references Domain and exposes `AddApplication`.
+- `Hfu.VoiceRegistration.Application`: use cases and contracts. It references Domain, exposes `AddApplication`, and owns backend registration tool handlers.
 - `Hfu.VoiceRegistration.Infrastructure`: future external adapters. It references Application and exposes `AddInfrastructure`.
 - `Hfu.VoiceRegistration.Api`: ASP.NET Core host and HTTP endpoints. It references Application and Infrastructure.
 
@@ -54,6 +54,22 @@ Completion validation is intentionally conservative:
 
 This stage intentionally avoids databases, Redis, EF Core, and production persistence.
 
+## Stage 4 Backend Registration Tools
+
+`Hfu.VoiceRegistration.Application` now exposes `IRegistrationToolService` as the application boundary for future HTTP and OpenAI tool-call adapters.
+
+The service supports:
+
+- updating one or more registration fields;
+- confirming captured fields;
+- marking fields as needing clarification;
+- clearing fields back to missing;
+- reading the authoritative registration state.
+
+The service validates field names and values server-side before mutating state. Invalid tool input returns structured errors and leaves the stored `RegistrationDraft` unchanged. Successful mutations run through `IConversationSessionStore.UpdateAsync`, set the session active, advance session versioning through the existing event journal, and return a state snapshot with missing required fields, fields needing clarification, fields awaiting confirmation, and `RegistrationCanBeCompleted`.
+
+Stage 4 deliberately does not expose HTTP endpoints, call OpenAI, or submit final registrations. The actual `complete_registration` flow remains deferred until fake HFU registration and API stages.
+
 ## Future Voice Architecture
 
 ```mermaid
@@ -72,7 +88,7 @@ Future principle:
 - OpenAI owns speech-to-speech processing.
 - Browser owns WebRTC audio transport and UI display.
 
-The tool-call bridge should stay transport-aware but business-rule-light. Backend handlers remain the authority for validation, draft updates, and completion.
+The tool-call bridge should stay transport-aware but business-rule-light. Backend registration tools remain the authority for validation, draft updates, and completion eligibility.
 
 ## Future SIP Readiness
 
@@ -88,4 +104,4 @@ Registration logic must not depend directly on browser WebRTC. A later SIP/IP te
 
 ## Current Non-Goals
 
-The current implementation does not include OpenAI, WebRTC, SignalR, fake HFU registration, databases, Redis, HTTP registration APIs, or production HFU integration.
+The current implementation does not include OpenAI, WebRTC, SignalR, fake HFU registration, final registration submission, databases, Redis, HTTP registration APIs, or production HFU integration.

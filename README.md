@@ -1,6 +1,6 @@
 # Hfu.VoiceRegistration
 
-External advertising PoC for HFU voice-assisted registration. The current implementation contains the Stage 1 runnable skeleton, Stage 2 pure domain model, and Stage 3 in-memory conversation session management.
+External advertising PoC for HFU voice-assisted registration. The current implementation contains the Stage 1 runnable skeleton, Stage 2 pure domain model, Stage 3 in-memory conversation session management, and Stage 4 application-level backend registration tools.
 
 This PoC is not intended to process real personal data. Do not enter real user registration details into local demos.
 
@@ -87,6 +87,20 @@ Stage 3 adds in-memory conversation session storage behind the application-level
 
 This is still a PoC in-memory implementation. No EF Core, Redis, database, or production persistence is used.
 
+## Backend Registration Tools
+
+Stage 4 adds application-level backend registration tools behind `IRegistrationToolService`:
+
+- `update_registration_fields`
+- `confirm_registration_fields`
+- `mark_fields_for_clarification`
+- `clear_registration_fields`
+- `get_registration_state`
+
+The tools update the server-owned `RegistrationDraft` through `IConversationSessionStore`, validate supported field names, normalize basic values, reject invalid input without changing the draft, and return a `RegistrationToolResult` with the current registration state plus structured errors.
+
+This stage does not add HTTP endpoints or OpenAI integration. The future tool-call bridge should call this application service instead of editing registration state directly.
+
 ## Frontend
 
 Install dependencies:
@@ -148,8 +162,7 @@ These are intentionally not implemented yet:
 - SignalR
 - OpenAI client or Realtime API
 - WebRTC
-- backend AI tools
+- OpenAI tool-call bridge
+- final `complete_registration` submission flow
 - EF Core, database packages, Redis, or persistent storage
 - production HFU integration
-
-Do not move to Stage 4 without a separate request.

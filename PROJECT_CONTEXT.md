@@ -191,6 +191,29 @@ Default timeout values:
 
 Stage 3 still must not add HTTP APIs, OpenAI, WebRTC, SignalR, fake HFU registration, EF Core, databases, Redis, or production HFU integration.
 
+Stage 4 was separately requested and implements application-level backend registration tools with the conservative scope approved on 2026-07-22.
+
+## Stage 4 Scope
+
+Stage 4 implements:
+
+- `IRegistrationToolService`;
+- `update_registration_fields`;
+- `confirm_registration_fields`;
+- `mark_fields_for_clarification`;
+- `clear_registration_fields`;
+- `get_registration_state`;
+- field registry for all known registration field names;
+- basic normalization and strict typed validation;
+- structured tool result DTOs with current state and errors;
+- Application tests for direct tool-handler usage without HTTP or OpenAI.
+
+Confirmed Stage 4 boundary:
+
+- do not add OpenAI SDK, Realtime API, WebRTC, SignalR, HTTP registration endpoints, fake HFU registration, EF Core, databases, Redis, or production HFU integration;
+- defer actual `complete_registration` submission until the fake HFU/API stages;
+- keep `registrationCanBeCompleted` in state so the future completion handler can reuse the existing validation.
+
 ## Full Technical Specification Highlights
 
 The full spec describes:
