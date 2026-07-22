@@ -1,6 +1,6 @@
 # Hfu.VoiceRegistration
 
-External advertising PoC for HFU voice-assisted registration. The current implementation contains the Stage 1 runnable skeleton and Stage 2 pure domain model with registration completion validation.
+External advertising PoC for HFU voice-assisted registration. The current implementation contains the Stage 1 runnable skeleton, Stage 2 pure domain model, and Stage 3 in-memory conversation session management.
 
 This PoC is not intended to process real personal data. Do not enter real user registration details into local demos.
 
@@ -22,6 +22,7 @@ src/
 tests/
   Hfu.VoiceRegistration.Domain.Tests/
   Hfu.VoiceRegistration.Application.Tests/
+  Hfu.VoiceRegistration.Infrastructure.Tests/
   Hfu.VoiceRegistration.Api.IntegrationTests/
 docs/
   architecture.md
@@ -72,6 +73,20 @@ Stage 2 adds pure domain types and rules in `src\Hfu.VoiceRegistration.Domain`:
 
 The domain model is covered by unit tests and does not depend on HTTP, OpenAI, SignalR, WebRTC, storage, or fake HFU registration.
 
+## Session Management
+
+Stage 3 adds in-memory conversation session storage behind the application-level `IConversationSessionStore` interface:
+
+- multiple independent sessions are stored in memory;
+- per-session locking protects concurrent mutations;
+- successful mutations advance session `Version`;
+- the event journal remains part of each stored session;
+- inactive unfinished sessions expire after 30 minutes;
+- completed sessions expire after 60 minutes;
+- a hosted cleanup service runs every 5 minutes.
+
+This is still a PoC in-memory implementation. No EF Core, Redis, database, or production persistence is used.
+
 ## Frontend
 
 Install dependencies:
@@ -104,7 +119,7 @@ npm.cmd test -- --run
 
 ## Configuration
 
-Stage 1 includes placeholder configuration only:
+Current local configuration contains OpenAI placeholders and Stage 3 session timeout settings:
 
 ```json
 {
@@ -114,17 +129,21 @@ Stage 1 includes placeholder configuration only:
   },
   "Frontend": {
     "BaseUrl": "http://localhost:5173"
+  },
+  "ConversationSessions": {
+    "IncompleteSessionExpiration": "00:30:00",
+    "CompletedSessionExpiration": "01:00:00",
+    "CleanupInterval": "00:05:00"
   }
 }
 ```
 
-No OpenAI API key is required for Stage 1.
+No OpenAI API key is required yet.
 
 ## Current Exclusions
 
 These are intentionally not implemented yet:
 
-- in-memory session management
 - fake HFU registration
 - SignalR
 - OpenAI client or Realtime API
@@ -133,4 +152,4 @@ These are intentionally not implemented yet:
 - EF Core, database packages, Redis, or persistent storage
 - production HFU integration
 
-Do not move to Stage 3 without a separate request.
+Do not move to Stage 4 without a separate request.

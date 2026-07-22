@@ -38,6 +38,22 @@ Completion validation is intentionally conservative:
 - internally displaced users require `regionBeforeWar` and `displacedCertificateYear`;
 - consent and final registration confirmation must be true.
 
+## Stage 3 Session Storage
+
+`Hfu.VoiceRegistration.Application` defines `IConversationSessionStore` so later application use cases depend on a stable abstraction instead of an in-memory implementation.
+
+`Hfu.VoiceRegistration.Infrastructure` provides the current PoC implementation:
+
+- `InMemoryConversationSessionStore` stores sessions in a `ConcurrentDictionary`;
+- each session has its own lock for serialized mutations;
+- successful mutation updates advance `ConversationSession.Version`;
+- session events stay inside the stored `ConversationSession`;
+- unfinished inactive sessions expire after 30 minutes;
+- completed sessions expire after 60 minutes;
+- `ConversationSessionCleanupService` periodically removes expired sessions.
+
+This stage intentionally avoids databases, Redis, EF Core, and production persistence.
+
 ## Future Voice Architecture
 
 ```mermaid
@@ -72,4 +88,4 @@ Registration logic must not depend directly on browser WebRTC. A later SIP/IP te
 
 ## Current Non-Goals
 
-The current implementation does not include OpenAI, WebRTC, SignalR, fake HFU registration, in-memory session storage, databases, Redis, or production HFU integration.
+The current implementation does not include OpenAI, WebRTC, SignalR, fake HFU registration, databases, Redis, HTTP registration APIs, or production HFU integration.

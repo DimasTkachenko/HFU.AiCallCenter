@@ -167,6 +167,30 @@ Approved conservative completion rule:
 
 Stage 2 must not add HTTP APIs, stores, OpenAI, WebRTC, SignalR, fake HFU registration, databases, Redis, or production HFU integration.
 
+Stage 3 was separately requested and adds in-memory session management with a dedicated `Hfu.VoiceRegistration.Infrastructure.Tests` project.
+
+## Stage 3 Scope
+
+Stage 3 implements:
+
+- application-level `IConversationSessionStore`;
+- `ConversationSessionStoreOptions`;
+- infrastructure-level `InMemoryConversationSessionStore`;
+- per-session locking for mutations;
+- versioning for successful mutation updates;
+- event journal persistence as part of `ConversationSession`;
+- expiration for unfinished and completed sessions;
+- hosted cleanup service;
+- infrastructure tests for store behavior and DI registration.
+
+Default timeout values:
+
+- unfinished inactive session: 30 minutes;
+- completed session: 60 minutes;
+- cleanup interval: 5 minutes.
+
+Stage 3 still must not add HTTP APIs, OpenAI, WebRTC, SignalR, fake HFU registration, EF Core, databases, Redis, or production HFU integration.
+
 ## Full Technical Specification Highlights
 
 The full spec describes:
