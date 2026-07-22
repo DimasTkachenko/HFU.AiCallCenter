@@ -286,6 +286,29 @@ Confirmed Stage 7 boundary:
 - do not accept final registration DTOs from HTTP clients;
 - full registration flow should be testable through Swagger/Postman without OpenAI.
 
+Stage 8 was separately requested and implements React UI without voice.
+
+## Stage 8 Scope
+
+Stage 8 implements:
+
+- React/Vite registration workspace over Stage 7 HTTP endpoints;
+- Russian UI labels;
+- Ukrainian canonical region display values from `GET /api/reference-data/regions`;
+- session creation and `localStorage` restoration;
+- registration state display with field statuses and validation issue lists;
+- manual developer tool-call emulator for update, confirm, mark clarification, clear, get state, complete, and abandon;
+- demo-data fill action for fast manual testing;
+- structured tool error panel;
+- fake HFU registration result panel;
+- frontend tests for API client and UI flows.
+
+Confirmed Stage 8 boundary:
+
+- do not add OpenAI SDK, Realtime API, WebRTC, SignalR, audio capture, transcript UI, EF Core, databases, Redis, or production HFU integration;
+- do not submit final registration DTOs from the frontend;
+- backend remains authoritative for state, validation, completion, and fake HFU registration.
+
 ## Full Technical Specification Highlights
 
 The full spec describes:

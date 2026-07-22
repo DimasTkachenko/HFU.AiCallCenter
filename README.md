@@ -1,6 +1,6 @@
 # Hfu.VoiceRegistration
 
-External advertising PoC for HFU voice-assisted registration. The current implementation contains the Stage 1 runnable skeleton, Stage 2 pure domain model, Stage 3 in-memory conversation session management, Stage 4 application-level backend registration tools, Stage 5 reference data for region matching, Stage 6 fake HFU registration completion, and Stage 7 backend HTTP API.
+External advertising PoC for HFU voice-assisted registration. The current implementation contains the Stage 1 runnable skeleton, Stage 2 pure domain model, Stage 3 in-memory conversation session management, Stage 4 application-level backend registration tools, Stage 5 reference data for region matching, Stage 6 fake HFU registration completion, Stage 7 backend HTTP API, and Stage 8 React UI without voice.
 
 This PoC is not intended to process real personal data. Do not enter real user registration details into local demos.
 
@@ -105,7 +105,7 @@ Stage 4 adds application-level backend registration tools behind `IRegistrationT
 
 The tools update the server-owned `RegistrationDraft` through `IConversationSessionStore`, validate supported field names, normalize basic values, reject invalid input without changing the draft, and return a `RegistrationToolResult` with the current registration state plus structured errors.
 
-The future OpenAI tool-call bridge should call this application service through the Stage 7 HTTP API instead of editing registration state directly.
+The future OpenAI tool-call bridge should call this application service through the Stage 7 HTTP API instead of editing registration state directly. Stage 8 already exercises these tools through a manual React UI.
 
 ## Reference Data
 
@@ -170,7 +170,16 @@ Frontend URL:
 http://127.0.0.1:5173
 ```
 
-The Vite dev server proxies `/health` to `http://localhost:5076`.
+The Vite dev server proxies `/health` and `/api` to `http://localhost:5076`.
+
+Stage 8 frontend capabilities:
+
+- creates and restores conversation sessions with `localStorage`;
+- displays backend registration state, field statuses, completion issues, and structured tool errors;
+- provides a manual demo/developer tool emulator for update, confirm, clarification, clear, state refresh, and completion;
+- shows the fake HFU registration result when completion succeeds.
+
+For manual UI testing, run the API first, then run the frontend and open `http://127.0.0.1:5173`.
 
 Build and test:
 
@@ -206,7 +215,7 @@ No OpenAI API key is required yet.
 
 These are intentionally not implemented yet:
 
-- SignalR
+- SignalR live updates
 - OpenAI client or Realtime API
 - WebRTC
 - OpenAI tool-call bridge

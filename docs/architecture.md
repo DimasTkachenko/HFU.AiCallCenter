@@ -8,7 +8,7 @@
 
 ```mermaid
 flowchart LR
-    Browser["React/Vite frontend"] -->|GET /health today| Api["ASP.NET Core API"]
+    Browser["React/Vite frontend"] -->|/health and /api registration flow| Api["ASP.NET Core API"]
     Manual["Swagger/Postman"] -->|/api registration flow| Api
     Api --> App["Application layer"]
     App --> Domain["Domain layer"]
@@ -16,7 +16,7 @@ flowchart LR
     Infra --> FakeHfu["Fake HFU adapter"]
 ```
 
-The frontend still calls only `GET /health`. The backend also exposes Stage 7 HTTP endpoints for manual registration-flow testing through Swagger or Postman.
+The frontend now calls `GET /health` plus Stage 7 `/api` endpoints. The same backend flow remains testable through Swagger or Postman.
 
 ## Backend Layers
 
@@ -110,6 +110,21 @@ HTTP endpoints are transport adapters over application services:
 
 Business tool failures remain application responses: the API returns `200 OK` with `RegistrationToolResult.Errors` and current state for cases like `RegistrationCannotBeCompleted`, `RegionNotFound`, or `RegistrationAlreadyCompleted`. HTTP-layer failures use Problem Details, including `404` for missing sessions and `409` for abandoning completed sessions.
 
+## Stage 8 React UI Without Voice
+
+`Hfu.VoiceRegistration.Web` is now a React/Vite operational demo UI over the Stage 7 HTTP API. It uses Russian labels while preserving Ukrainian canonical region values from reference data.
+
+The UI supports:
+
+- creating a conversation session;
+- restoring a saved session from `localStorage`;
+- loading Ukrainian region reference data;
+- filling demo registration data;
+- manually invoking update, confirm, clarification, clear, get-state, complete, and abandon actions;
+- displaying server-owned registration state, field statuses, completion issues, structured tool errors, and fake HFU completion results.
+
+The frontend does not own registration rules and does not submit final registration DTOs. It sends only typed Stage 7 requests and replaces its displayed state with backend responses.
+
 ## Future Voice Architecture
 
 ```mermaid
@@ -144,4 +159,4 @@ Registration logic must not depend directly on browser WebRTC. A later SIP/IP te
 
 ## Current Non-Goals
 
-The current implementation does not include OpenAI, WebRTC, SignalR, databases, Redis, React registration UI, or production HFU integration.
+The current implementation does not include OpenAI, WebRTC, SignalR live updates, databases, Redis, audio/transcript UI, or production HFU integration.
