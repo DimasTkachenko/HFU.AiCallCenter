@@ -10,9 +10,6 @@ public sealed class OpenAIRealtimeOptions
     private const string DefaultRealtimeInputTranscriptionModel = "gpt-realtime-whisper";
     private const int DefaultRealtimeMaxSdpOfferCharacters = 131_072;
     private const int DefaultRealtimeCallsPerMinute = 12;
-    private const string DefaultRealtimeInstructions =
-        "You are a helpful HFU voice registration assistant demo. Keep responses brief. Use the provided registration tools when you need to save, confirm, inspect, clear, or complete registration data. Do not claim registration data was saved or completed unless a tool result confirms it.";
-
     public string? ApiKey { get; set; }
 
     public string? BaseUrl { get; set; }
@@ -48,7 +45,8 @@ public sealed class OpenAIRealtimeOptions
             ? RealtimeCallsPerMinute.Value
             : DefaultRealtimeCallsPerMinute;
 
-    public string EffectiveRealtimeInstructions => ValueOrDefault(RealtimeInstructions, DefaultRealtimeInstructions);
+    public string EffectiveRealtimeInstructions =>
+        ValueOrDefault(RealtimeInstructions, OpenAIRealtimeRegistrationPrompt.CurrentInstructions);
 
     private static string ValueOrDefault(string? value, string fallback)
     {

@@ -351,7 +351,51 @@ Confirmed Stage 10 boundary:
 - the React app never receives the OpenAI API key;
 - Stage 10 includes a local rate limit for Realtime call creation, but production abuse prevention still requires later auth/routing hardening;
 - the AI does not update, confirm, clear, clarify, or complete registration fields in Stage 10;
-- OpenAI tool-call bridge, full registration prompt, reconnect hardening, SIP/IP telephony, EF Core, databases, Redis/backplane, persistent storage, auth, and production HFU integration remain deferred.
+- OpenAI tool-call bridge and full registration prompt were intentionally deferred after Stage 10 and are tracked in later stages; reconnect hardening, SIP/IP telephony, EF Core, databases, Redis/backplane, persistent storage, auth, and production HFU integration remain deferred.
+
+Stage 11 was separately requested and implements the OpenAI Realtime tool-call bridge.
+
+## Stage 11 Scope
+
+Stage 11 implements:
+
+- Realtime function tool definitions in the backend-owned OpenAI session payload;
+- `tool_choice: "auto"` for the Realtime session;
+- all existing registration tools exposed to the model: `update_registration_fields`, `confirm_registration_fields`, `mark_fields_for_clarification`, `clear_registration_fields`, `get_registration_state`, and `complete_registration`;
+- frontend parsing of Realtime function-call events from the `oai-events` data channel;
+- frontend dispatch from Realtime tool calls to Stage 7 typed HTTP endpoints;
+- structured `function_call_output` responses back to OpenAI;
+- duplicate protection by Realtime `callId`;
+- compact AI tool-call diagnostics in the voice panel.
+
+Confirmed Stage 11 boundary:
+
+- backend registration state remains authoritative;
+- the frontend bridge is transport-aware but business-rule-light;
+- `complete_registration` is exposed but guarded by existing backend validation, consent, final confirmation, and `RegistrationAlreadyCompleted` behavior;
+- Stage 11 does not add the full registration system prompt, reconnect/recovery hardening, developer prompt panel, prompt evals, SIP/IP telephony, EF Core, databases, Redis/backplane, persistent storage, auth, or production HFU integration.
+
+Stage 12 was separately requested and implements the registration system prompt with Ukrainian assistant speech.
+
+## Stage 12 Scope
+
+Stage 12 implements:
+
+- backend-owned versioned default prompt `stage-12-registration-interview-v1`;
+- strict assistant output language: Ukrainian only;
+- accepted user input languages: Ukrainian, Russian, and mixed Ukrainian/Russian;
+- prompt guidance for greeting, demo-data warning, field collection, clarification, critical-field confirmation, final summary, consent, final confirmation, and completion;
+- tool-use rules for `get_registration_state`, `update_registration_fields`, `confirm_registration_fields`, `mark_fields_for_clarification`, `clear_registration_fields`, and `complete_registration`;
+- exact-value rules for `dateOfBirth`, `phoneNumber`, `email`, regions, `userCategory`, and `displacedCertificateYear`;
+- backend tests for default prompt content, session payload content, and custom `OpenAI:RealtimeInstructions` override behavior;
+- README/manual testing documentation for a real OpenAI key and browser microphone.
+
+Confirmed Stage 12 boundary:
+
+- no prompt eval automation yet;
+- no reconnect/recovery hardening yet;
+- no developer prompt panel UI yet;
+- no SIP/IP telephony, EF Core, databases, Redis/backplane, persistent storage, auth, or production HFU integration.
 
 ## Full Technical Specification Highlights
 

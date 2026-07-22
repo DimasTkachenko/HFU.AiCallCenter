@@ -1,6 +1,6 @@
 # Hfu.VoiceRegistration
 
-External advertising PoC for HFU voice-assisted registration. The current implementation contains the Stage 1 runnable skeleton, Stage 2 pure domain model, Stage 3 in-memory conversation session management, Stage 4 application-level backend registration tools, Stage 5 reference data for region matching, Stage 6 fake HFU registration completion, Stage 7 backend HTTP API, Stage 8 React UI without voice, Stage 9 SignalR live updates, Stage 10 OpenAI Realtime WebRTC voice transport, and Stage 11 OpenAI Realtime tool-call bridge.
+External advertising PoC for HFU voice-assisted registration. The current implementation contains the Stage 1 runnable skeleton, Stage 2 pure domain model, Stage 3 in-memory conversation session management, Stage 4 application-level backend registration tools, Stage 5 reference data for region matching, Stage 6 fake HFU registration completion, Stage 7 backend HTTP API, Stage 8 React UI without voice, Stage 9 SignalR live updates, Stage 10 OpenAI Realtime WebRTC voice transport, Stage 11 OpenAI Realtime tool-call bridge, and Stage 12 Ukrainian registration interview prompt.
 
 This PoC is not intended to process real personal data. Do not enter real user registration details into local demos.
 
@@ -202,9 +202,26 @@ Stage 11 OpenAI tool-call bridge capabilities:
 - returns structured `function_call_output` events to OpenAI and asks the model to continue;
 - displays compact AI tool-call diagnostics in the voice panel.
 
-Stage 11 enables AI-driven registration state changes through voice, but the full registration conversation prompt and production call-center behavior remain deferred to later stages.
+Stage 12 registration interview prompt capabilities:
+
+- uses a backend-owned versioned prompt, `stage-12-registration-interview-v1`, as the default Realtime instructions;
+- requires the assistant to speak to the user only in Ukrainian;
+- allows the user to answer in Ukrainian, Russian, or mixed Ukrainian/Russian speech;
+- guides the model through greeting, demo-data warning, one-field-at-a-time collection, clarification, critical-field confirmation, final summary, consent, and completion;
+- tells the model to use the existing registration tools and to treat backend tool results as authoritative;
+- gates `complete_registration` behind current backend state, no missing/unclear/unconfirmed blocking fields, a spoken final summary, explicit personal-data consent, and explicit final registration confirmation.
+
+Stage 12 is the first stage where the live AI assistant can be manually tested as an interview agent that fills and completes the registration draft. Stage 11 could call tools, but did not yet define the registration conversation policy.
 
 For manual UI testing, run the API first, then run the frontend and open `http://127.0.0.1:5173`.
+
+For manual Stage 12 voice-interview testing:
+
+1. Set `OpenAI:ApiKey` in `appsettings.Development.json` or set `OpenAI__ApiKey` in the environment.
+2. Run the API and frontend.
+3. Create a conversation session in the browser and start voice.
+4. Use demo, non-real personal data. You may answer in Russian or mixed Russian/Ukrainian; the assistant should continue speaking Ukrainian.
+5. Watch the transcript, registration state, backend live events, and `AI tools` diagnostics. The assistant should save values through tools, confirm critical fields, summarize the draft, ask for consent/final confirmation, and complete only after backend validation allows it.
 
 Build and test:
 
@@ -227,7 +244,7 @@ Current local configuration contains OpenAI Realtime settings and session timeou
     "RealtimeInputTranscriptionModel": "gpt-realtime-whisper",
     "RealtimeMaxSdpOfferCharacters": 131072,
     "RealtimeCallsPerMinute": 12,
-    "RealtimeInstructions": "You are a helpful HFU voice registration assistant demo. Keep responses brief. Use the provided registration tools when you need to save, confirm, inspect, clear, or complete registration data. Do not claim registration data was saved or completed unless a tool result confirms it."
+    "RealtimeInstructions": ""
   },
   "Frontend": {
     "BaseUrl": "http://localhost:5173"
@@ -242,11 +259,14 @@ Current local configuration contains OpenAI Realtime settings and session timeou
 
 For local voice testing, set `OpenAI:ApiKey` in `appsettings.Development.json` or provide `OpenAI__ApiKey` as an environment variable. Do not put the API key in the React app or frontend environment variables. The Realtime call endpoint is rate-limited per remote address and session; tune it with `OpenAI__RealtimeCallsPerMinute`.
 
+Leave `OpenAI:RealtimeInstructions` blank to use the backend-owned Stage 12 prompt from `OpenAIRealtimeRegistrationPrompt`. Set `OpenAI__RealtimeInstructions` or appsettings only when intentionally testing a custom prompt override.
+
 ## Current Exclusions
 
 These are intentionally not implemented yet:
 
-- full registration system prompt
+- reconnect and recovery hardening
+- developer prompt panel and automated prompt evals
 - production voice registration dialog policy
 - SIP/IP telephony transport
 - EF Core, database packages, Redis/backplane, or persistent storage

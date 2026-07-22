@@ -145,7 +145,7 @@ flowchart LR
     Api -->|SignalR events| Browser
 ```
 
-Stage 10 adds the first OpenAI voice transport without connecting AI tool calls to registration state:
+Stage 10 added the first OpenAI voice transport:
 
 - Backend owns conversation and registration state.
 - OpenAI owns speech-to-speech processing.
@@ -155,7 +155,34 @@ Stage 10 adds the first OpenAI voice transport without connecting AI tool calls 
 - React owns microphone capture, remote audio playback, the `oai-events` data channel, voice status, diagnostics, and transcript rendering.
 - Realtime call creation validates `application/sdp`, rejects oversized SDP offers, maps OpenAI transport failures to `502`, and is rate-limited per remote address and session.
 
-The tool-call bridge remains a later stage and should stay transport-aware but business-rule-light. Backend registration tools remain the authority for validation, draft updates, and completion eligibility.
+## Stage 11 OpenAI Tool-Call Bridge
+
+Stage 11 connects OpenAI Realtime function calls to the existing Stage 7 backend registration tool endpoints:
+
+- The backend includes function tool definitions in the Realtime session payload.
+- The browser `oai-events` data channel receives function-call events.
+- The frontend bridge validates tool-call arguments, dispatches to typed HTTP clients, applies returned `RegistrationToolResult` state to the UI, and sends `function_call_output` back to OpenAI.
+- Duplicate Realtime tool calls are ignored by `callId`.
+- Unknown tools, malformed arguments, and dispatch failures are returned as structured function-call output.
+
+The bridge is transport-aware but business-rule-light. Backend registration tools remain the authority for validation, draft updates, region normalization, completion eligibility, and fake HFU completion.
+
+## Stage 12 Registration System Prompt
+
+Stage 12 adds the backend-owned OpenAI Realtime registration interview prompt. `OpenAIRealtimeRegistrationPrompt` contains the versioned default instructions (`stage-12-registration-interview-v1`), and `OpenAIRealtimeOptions.EffectiveRealtimeInstructions` uses that prompt unless `OpenAI:RealtimeInstructions` is set.
+
+The prompt instructs the model to:
+
+- speak to the user only in Ukrainian;
+- accept Ukrainian, Russian, and mixed Ukrainian/Russian user replies;
+- warn local testers to use demo, non-real personal data;
+- call `get_registration_state` before collection and before the final summary;
+- collect required, optional, and conditionally required fields through existing tools;
+- save `userCategory` as backend enum values and date of birth as `yyyy-MM-dd`;
+- confirm exact/critical fields before completion;
+- call `complete_registration` only after current state, no blocking validation issues, final summary, explicit personal-data consent, and explicit final registration confirmation.
+
+Tool results remain authoritative. The model must not claim a field was saved, confirmed, or completed until the corresponding backend tool result succeeds.
 
 ## Future SIP Readiness
 
@@ -172,4 +199,4 @@ Registration logic must not depend directly on browser WebRTC. A later SIP/IP te
 
 ## Current Non-Goals
 
-The current implementation does not include the OpenAI tool-call bridge, AI-driven registration updates, the full registration system prompt, databases, Redis/backplane scale-out, SIP/IP telephony, or production HFU integration.
+The current implementation does not include reconnect/recovery hardening, developer prompt UI, automated prompt evals, databases, Redis/backplane scale-out, SIP/IP telephony, authentication/authorization, or production HFU integration.
