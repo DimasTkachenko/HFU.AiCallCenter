@@ -2,6 +2,7 @@ import type { ProblemDetails } from "./registrationTypes";
 import type {
   CreateOpenAIRealtimeWebRtcClientOptions,
   OpenAIRealtimeEventLogEntry,
+  OpenAIRealtimeToolCall,
   OpenAIRealtimeTranscriptEntry,
   OpenAIRealtimeVoiceConnectionState,
   OpenAIRealtimeWebRtcClient
@@ -41,6 +42,7 @@ export function createOpenAIRealtimeWebRtcClient(
   const stateHandlers = new Set<(state: OpenAIRealtimeVoiceConnectionState) => void>();
   const transcriptHandlers = new Set<(entry: OpenAIRealtimeTranscriptEntry) => void>();
   const eventHandlers = new Set<(event: OpenAIRealtimeEventLogEntry) => void>();
+  const toolCallHandlers = new Set<(toolCall: OpenAIRealtimeToolCall) => void>();
 
   let peerConnection: RTCPeerConnection | null = null;
   let dataChannel: RTCDataChannel | null = null;
@@ -65,6 +67,12 @@ export function createOpenAIRealtimeWebRtcClient(
   function emitEvent(event: OpenAIRealtimeEventLogEntry) {
     for (const handler of eventHandlers) {
       handler(event);
+    }
+  }
+
+  function emitToolCall(toolCall: OpenAIRealtimeToolCall) {
+    for (const handler of toolCallHandlers) {
+      handler(toolCall);
     }
   }
 
@@ -225,6 +233,12 @@ export function createOpenAIRealtimeWebRtcClient(
       receivedAt
     });
 
+    const toolCall = realtimeToolCall(payload, eventId, receivedAt);
+    if (toolCall) {
+      emitToolCall(toolCall);
+      return;
+    }
+
     if (type === "conversation.item.input_audio_transcription.completed") {
       const transcript = transcriptText(payload);
       if (!transcript) {
@@ -293,6 +307,11 @@ export function createOpenAIRealtimeWebRtcClient(
       eventHandlers.add(handler);
 
       return () => eventHandlers.delete(handler);
+    },
+    onToolCall(handler) {
+      toolCallHandlers.add(handler);
+
+      return () => toolCallHandlers.delete(handler);
     }
   };
 }
@@ -346,6 +365,38 @@ function transcriptText(payload: Record<string, unknown>): string | null {
   return transcriptContent
     ? transcriptContent.transcript as string
     : null;
+}
+
+function realtimeToolCall(
+  payload: Record<string, unknown>,
+  eventId: string,
+  receivedAt: string
+): OpenAIRealtimeToolCall | null {
+  const type = stringField(payload, "type");
+  const source = type === "response.output_item.done"
+    ? recordField(payload, "item")
+    : payload;
+  if (
+    type !== "response.function_call_arguments.done"
+    && !(type === "response.output_item.done" && stringField(source ?? {}, "type") === "function_call")
+  ) {
+    return null;
+  }
+
+  const callId = source ? stringField(source, "call_id") : null;
+  const name = source ? stringField(source, "name") : null;
+  const argumentsJson = source ? stringField(source, "arguments") : null;
+  if (!callId || !name || !argumentsJson) {
+    return null;
+  }
+
+  return {
+    id: eventId,
+    callId,
+    name,
+    argumentsJson,
+    receivedAt
+  };
 }
 
 function stringField(payload: Record<string, unknown>, fieldName: string): string | null {

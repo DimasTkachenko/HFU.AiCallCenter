@@ -1,6 +1,6 @@
 # Hfu.VoiceRegistration
 
-External advertising PoC for HFU voice-assisted registration. The current implementation contains the Stage 1 runnable skeleton, Stage 2 pure domain model, Stage 3 in-memory conversation session management, Stage 4 application-level backend registration tools, Stage 5 reference data for region matching, Stage 6 fake HFU registration completion, Stage 7 backend HTTP API, Stage 8 React UI without voice, Stage 9 SignalR live updates, and Stage 10 OpenAI Realtime WebRTC voice transport.
+External advertising PoC for HFU voice-assisted registration. The current implementation contains the Stage 1 runnable skeleton, Stage 2 pure domain model, Stage 3 in-memory conversation session management, Stage 4 application-level backend registration tools, Stage 5 reference data for region matching, Stage 6 fake HFU registration completion, Stage 7 backend HTTP API, Stage 8 React UI without voice, Stage 9 SignalR live updates, Stage 10 OpenAI Realtime WebRTC voice transport, and Stage 11 OpenAI Realtime tool-call bridge.
 
 This PoC is not intended to process real personal data. Do not enter real user registration details into local demos.
 
@@ -105,7 +105,7 @@ Stage 4 adds application-level backend registration tools behind `IRegistrationT
 
 The tools update the server-owned `RegistrationDraft` through `IConversationSessionStore`, validate supported field names, normalize basic values, reject invalid input without changing the draft, and return a `RegistrationToolResult` with the current registration state plus structured errors.
 
-The future OpenAI tool-call bridge should call this application service through the Stage 7 HTTP API instead of editing registration state directly. Stage 8 already exercises these tools through a manual React UI.
+The OpenAI tool-call bridge calls this application service through the Stage 7 HTTP API instead of editing registration state directly. Stage 8 also exercises these tools through a manual React UI.
 
 ## Reference Data
 
@@ -130,7 +130,7 @@ Stage 6 adds the application-level `complete_registration` workflow and an infra
 - fake demo IDs use `DEMO-{year}-{counter:000000}`;
 - no real HFU backend is called.
 
-Stage 7 exposes this workflow through typed HTTP endpoints. Future OpenAI tool-call adapters should call those endpoints instead of submitting final registration payloads directly.
+Stage 7 exposes this workflow through typed HTTP endpoints. The OpenAI tool-call bridge calls those endpoints instead of submitting final registration payloads directly.
 
 ## Backend HTTP API
 
@@ -193,7 +193,16 @@ Stage 10 voice capabilities:
 - creates a browser WebRTC connection with microphone capture, remote audio playback, and an `oai-events` data channel;
 - displays voice connection state, compact OpenAI Realtime diagnostics, and transcript entries from known Realtime events.
 
-Stage 10 does not let the AI update registration fields. The registration tool-call bridge and full voice registration prompt remain deferred to later stages.
+Stage 11 OpenAI tool-call bridge capabilities:
+
+- adds Realtime function tool definitions to the server-owned OpenAI session payload;
+- exposes update, confirm, clarification, clear, state, and completion tools to the model;
+- listens for function-call events on the browser `oai-events` data channel;
+- dispatches tool calls through the existing Stage 7 HTTP endpoints, keeping backend state authoritative;
+- returns structured `function_call_output` events to OpenAI and asks the model to continue;
+- displays compact AI tool-call diagnostics in the voice panel.
+
+Stage 11 enables AI-driven registration state changes through voice, but the full registration conversation prompt and production call-center behavior remain deferred to later stages.
 
 For manual UI testing, run the API first, then run the frontend and open `http://127.0.0.1:5173`.
 
@@ -218,7 +227,7 @@ Current local configuration contains OpenAI Realtime settings and session timeou
     "RealtimeInputTranscriptionModel": "gpt-realtime-whisper",
     "RealtimeMaxSdpOfferCharacters": 131072,
     "RealtimeCallsPerMinute": 12,
-    "RealtimeInstructions": "You are a helpful HFU voice registration assistant demo. Keep responses brief. Registration tools are not connected yet, so do not say you saved, submitted, or completed a registration."
+    "RealtimeInstructions": "You are a helpful HFU voice registration assistant demo. Keep responses brief. Use the provided registration tools when you need to save, confirm, inspect, clear, or complete registration data. Do not claim registration data was saved or completed unless a tool result confirms it."
   },
   "Frontend": {
     "BaseUrl": "http://localhost:5173"
@@ -237,9 +246,8 @@ For local voice testing, set `OpenAI:ApiKey` in `appsettings.Development.json` o
 
 These are intentionally not implemented yet:
 
-- OpenAI tool-call bridge
-- AI-driven registration field updates or completion through voice
 - full registration system prompt
+- production voice registration dialog policy
 - SIP/IP telephony transport
 - EF Core, database packages, Redis/backplane, or persistent storage
 - production HFU integration

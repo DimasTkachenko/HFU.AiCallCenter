@@ -11,7 +11,7 @@ public sealed class OpenAIRealtimeOptions
     private const int DefaultRealtimeMaxSdpOfferCharacters = 131_072;
     private const int DefaultRealtimeCallsPerMinute = 12;
     private const string DefaultRealtimeInstructions =
-        "You are a helpful HFU voice registration assistant demo. Keep responses brief. Registration tools are not connected yet, so do not say you saved, submitted, or completed a registration.";
+        "You are a helpful HFU voice registration assistant demo. Keep responses brief. Use the provided registration tools when you need to save, confirm, inspect, clear, or complete registration data. Do not claim registration data was saved or completed unless a tool result confirms it.";
 
     public string? ApiKey { get; set; }
 

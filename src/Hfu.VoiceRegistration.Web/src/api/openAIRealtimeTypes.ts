@@ -25,6 +25,14 @@ export interface OpenAIRealtimeEventLogEntry {
   receivedAt: string;
 }
 
+export interface OpenAIRealtimeToolCall {
+  id: string;
+  callId: string;
+  name: string;
+  argumentsJson: string;
+  receivedAt: string;
+}
+
 export interface CreateOpenAIRealtimeWebRtcClientOptions {
   sessionId: string;
   baseUrl?: string;
@@ -40,4 +48,5 @@ export interface OpenAIRealtimeWebRtcClient {
   onStateChange: (handler: (state: OpenAIRealtimeVoiceConnectionState) => void) => () => void;
   onTranscript: (handler: (entry: OpenAIRealtimeTranscriptEntry) => void) => () => void;
   onEvent: (handler: (event: OpenAIRealtimeEventLogEntry) => void) => () => void;
+  onToolCall: (handler: (toolCall: OpenAIRealtimeToolCall) => void) => () => void;
 }

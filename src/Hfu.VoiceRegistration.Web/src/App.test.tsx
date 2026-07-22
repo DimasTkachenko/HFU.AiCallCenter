@@ -8,6 +8,7 @@ import type {
 } from "./api/realtimeTypes";
 import type {
   OpenAIRealtimeEventLogEntry,
+  OpenAIRealtimeToolCall,
   OpenAIRealtimeTranscriptEntry,
   OpenAIRealtimeVoiceConnectionState
 } from "./api/openAIRealtimeTypes";
@@ -64,6 +65,7 @@ const openAIRealtimeClientMock = vi.hoisted(() => {
   const stateHandlers = new Set<(state: OpenAIRealtimeVoiceConnectionState) => void>();
   const transcriptHandlers = new Set<(entry: OpenAIRealtimeTranscriptEntry) => void>();
   const eventHandlers = new Set<(event: OpenAIRealtimeEventLogEntry) => void>();
+  const toolCallHandlers = new Set<(toolCall: OpenAIRealtimeToolCall) => void>();
   const client = {
     start: vi.fn(async () => {
       for (const handler of stateHandlers) {
@@ -86,6 +88,11 @@ const openAIRealtimeClientMock = vi.hoisted(() => {
       eventHandlers.add(handler);
 
       return () => eventHandlers.delete(handler);
+    }),
+    onToolCall: vi.fn((handler: (toolCall: OpenAIRealtimeToolCall) => void) => {
+      toolCallHandlers.add(handler);
+
+      return () => toolCallHandlers.delete(handler);
     })
   };
 
@@ -97,16 +104,23 @@ const openAIRealtimeClientMock = vi.hoisted(() => {
         handler(entry);
       }
     },
+    emitToolCall(toolCall: OpenAIRealtimeToolCall) {
+      for (const handler of toolCallHandlers) {
+        handler(toolCall);
+      }
+    },
     reset() {
       stateHandlers.clear();
       transcriptHandlers.clear();
       eventHandlers.clear();
+      toolCallHandlers.clear();
       client.start.mockClear();
       client.stop.mockClear();
       client.sendEvent.mockClear();
       client.onStateChange.mockClear();
       client.onTranscript.mockClear();
       client.onEvent.mockClear();
+      client.onToolCall.mockClear();
       this.createOpenAIRealtimeWebRtcClient.mockClear();
     }
   };
@@ -237,6 +251,60 @@ describe("App", () => {
     });
 
     expect(await screen.findByText("Mene zvaty Dima")).toBeInTheDocument();
+  });
+
+  it("runs AI realtime tool calls through backend registration tools", async () => {
+    const fetchMock = createFetchMock({
+      "POST /api/conversation-sessions": sessionResponse(),
+      [`POST /api/conversation-sessions/${sessionId}/tools/update-registration-fields`]: toolResult({
+        state: stateWithFields([
+          field("firstName", "AI Saved", "Captured")
+        ])
+      })
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Создать сессию" }));
+    await screen.findByText(sessionId);
+    fireEvent.click(screen.getByRole("button", { name: "Начать голос" }));
+    await screen.findByText("голос подключён");
+
+    openAIRealtimeClientMock.emitToolCall({
+      id: "evt-tool",
+      callId: "call-update",
+      name: "update_registration_fields",
+      argumentsJson: JSON.stringify({
+        fields: [{ name: "firstName", value: "AI Saved" }]
+      }),
+      receivedAt: "2026-07-22T12:03:00Z"
+    });
+
+    expect(await screen.findByText("AI Saved")).toBeInTheDocument();
+    expect(await screen.findByText("AI tools")).toBeInTheDocument();
+    expect(screen.getByText("update_registration_fields")).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/conversation-sessions/${sessionId}/tools/update-registration-fields`,
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          fields: [{ name: "firstName", value: "AI Saved" }]
+        })
+      })
+    );
+    expect(openAIRealtimeClientMock.client.sendEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "conversation.item.create",
+        item: expect.objectContaining({
+          type: "function_call_output",
+          call_id: "call-update"
+        })
+      })
+    );
+    expect(openAIRealtimeClientMock.client.sendEvent).toHaveBeenCalledWith({
+      type: "response.create"
+    });
   });
 
   it("restores a saved session on page load", async () => {

@@ -44,6 +44,15 @@ public sealed class OpenAIRealtimeClientTests
         Assert.Contains("\"model\":\"gpt-realtime-2.1\"", handler.Body);
         Assert.Contains("\"voice\":\"marin\"", handler.Body);
         Assert.Contains("gpt-realtime-whisper", handler.Body);
+        Assert.Contains("\"tool_choice\":\"auto\"", handler.Body);
+        Assert.Contains("\"name\":\"update_registration_fields\"", handler.Body);
+        Assert.Contains("\"name\":\"confirm_registration_fields\"", handler.Body);
+        Assert.Contains("\"name\":\"mark_fields_for_clarification\"", handler.Body);
+        Assert.Contains("\"name\":\"clear_registration_fields\"", handler.Body);
+        Assert.Contains("\"name\":\"get_registration_state\"", handler.Body);
+        Assert.Contains("\"name\":\"complete_registration\"", handler.Body);
+        Assert.Contains("\"personalDataConsent\"", handler.Body);
+        Assert.Contains("\"registrationConfirmed\"", handler.Body);
         Assert.DoesNotContain("sk-test", handler.Body);
     }
 

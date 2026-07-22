@@ -340,7 +340,8 @@ dd {
 }
 
 .transcript-list,
-.voice-event-list {
+.voice-event-list,
+.voice-tool-list {
   display: grid;
   gap: 0;
   margin: 0;
@@ -379,6 +380,50 @@ dd {
   border-top: 1px solid #edf0f4;
   overflow-wrap: anywhere;
   color: #556272;
+}
+
+.voice-tool-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px 8px;
+  align-items: center;
+  padding: 8px 0;
+  border-top: 1px solid #edf0f4;
+}
+
+.voice-tool-list strong,
+.voice-tool-list em {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #364254;
+  font-size: 0.82rem;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.voice-tool-list em {
+  grid-column: 1 / -1;
+  color: #657386;
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+.status-badge--tool-running {
+  border-color: #8bb6de;
+  background: #eef6ff;
+  color: #225b91;
+}
+
+.status-badge--tool-completed {
+  border-color: #79bd93;
+  background: #e9f8ef;
+  color: #17633f;
+}
+
+.status-badge--tool-error {
+  border-color: #e4a2a2;
+  background: #fff0f0;
+  color: #a23939;
 }
 
 .primary-button {

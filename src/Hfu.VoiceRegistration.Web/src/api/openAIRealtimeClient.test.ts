@@ -3,7 +3,10 @@ import {
   createOpenAIRealtimeWebRtcClient,
   startOpenAIRealtimeCall
 } from "./openAIRealtimeClient";
-import type { OpenAIRealtimeTranscriptEntry } from "./openAIRealtimeTypes";
+import type {
+  OpenAIRealtimeToolCall,
+  OpenAIRealtimeTranscriptEntry
+} from "./openAIRealtimeTypes";
 
 describe("startOpenAIRealtimeCall", () => {
   beforeEach(() => {
@@ -122,6 +125,79 @@ describe("createOpenAIRealtimeWebRtcClient", () => {
       text: "Vitaiu, Dima",
       isFinal: true
     });
+  });
+
+  it("turns finalized realtime function arguments into tool-call events", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response("answer-sdp", { status: 200 }))
+    );
+    const peerConnection = new FakePeerConnection();
+    const toolCalls: OpenAIRealtimeToolCall[] = [];
+    const client = createOpenAIRealtimeWebRtcClient({
+      sessionId: "66666666-6666-6666-6666-666666666666",
+      mediaDevices: fakeMediaDevices(),
+      peerConnectionFactory: () => peerConnection as unknown as RTCPeerConnection,
+      audioElementFactory: () => fakeAudioElement()
+    });
+    client.onToolCall((toolCall) => toolCalls.push(toolCall));
+    await client.start();
+
+    peerConnection.dataChannels[0].emit({
+      type: "response.function_call_arguments.done",
+      event_id: "evt-tool",
+      call_id: "call-update",
+      name: "update_registration_fields",
+      arguments: "{\"fields\":[{\"name\":\"firstName\",\"value\":\"Dimas\"}]}"
+    });
+
+    expect(toolCalls).toEqual([
+      {
+        id: "evt-tool",
+        callId: "call-update",
+        name: "update_registration_fields",
+        argumentsJson: "{\"fields\":[{\"name\":\"firstName\",\"value\":\"Dimas\"}]}",
+        receivedAt: expect.any(String)
+      }
+    ]);
+  });
+
+  it("turns finalized function call output items into tool-call events", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response("answer-sdp", { status: 200 }))
+    );
+    const peerConnection = new FakePeerConnection();
+    const toolCalls: OpenAIRealtimeToolCall[] = [];
+    const client = createOpenAIRealtimeWebRtcClient({
+      sessionId: "77777777-7777-7777-7777-777777777777",
+      mediaDevices: fakeMediaDevices(),
+      peerConnectionFactory: () => peerConnection as unknown as RTCPeerConnection,
+      audioElementFactory: () => fakeAudioElement()
+    });
+    client.onToolCall((toolCall) => toolCalls.push(toolCall));
+    await client.start();
+
+    peerConnection.dataChannels[0].emit({
+      type: "response.output_item.done",
+      event_id: "evt-output-item",
+      item: {
+        type: "function_call",
+        call_id: "call-state",
+        name: "get_registration_state",
+        arguments: "{}"
+      }
+    });
+
+    expect(toolCalls).toEqual([
+      {
+        id: "evt-output-item",
+        callId: "call-state",
+        name: "get_registration_state",
+        argumentsJson: "{}",
+        receivedAt: expect.any(String)
+      }
+    ]);
   });
 
   it("stops the data channel, peer connection, and microphone tracks", async () => {

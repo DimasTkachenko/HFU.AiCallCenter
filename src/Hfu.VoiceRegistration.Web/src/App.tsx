@@ -17,6 +17,11 @@ import {
   type ConversationRealtimeClient
 } from "./api/conversationRealtimeClient";
 import { createOpenAIRealtimeWebRtcClient } from "./api/openAIRealtimeClient";
+import {
+  createOpenAIRealtimeToolBridge,
+  type OpenAIRealtimeToolActivity,
+  type OpenAIRealtimeToolBridge
+} from "./api/openAIRealtimeToolBridge";
 import type {
   OpenAIRealtimeEventLogEntry,
   OpenAIRealtimeTranscriptEntry,
@@ -154,8 +159,10 @@ export default function App() {
   const [voiceState, setVoiceState] = useState<OpenAIRealtimeVoiceConnectionState>({ status: "idle" });
   const [voiceTranscripts, setVoiceTranscripts] = useState<OpenAIRealtimeTranscriptEntry[]>([]);
   const [voiceEvents, setVoiceEvents] = useState<OpenAIRealtimeEventLogEntry[]>([]);
+  const [voiceToolActivities, setVoiceToolActivities] = useState<OpenAIRealtimeToolActivity[]>([]);
   const realtimeClientRef = useRef<ConversationRealtimeClient | null>(null);
   const voiceClientRef = useRef<OpenAIRealtimeWebRtcClient | null>(null);
+  const voiceToolBridgeRef = useRef<OpenAIRealtimeToolBridge | null>(null);
   const voiceUnsubscribersRef = useRef<Array<() => void>>([]);
   const currentSessionIdRef = useRef<string | null>(null);
 
@@ -273,6 +280,7 @@ export default function App() {
       setVoiceState({ status: "idle" });
       setVoiceTranscripts([]);
       setVoiceEvents([]);
+      setVoiceToolActivities([]);
     }
 
     currentSessionIdRef.current = nextSession.sessionId;
@@ -382,12 +390,22 @@ export default function App() {
     setProblem(null);
     setVoiceTranscripts([]);
     setVoiceEvents([]);
+    setVoiceToolActivities([]);
 
     const voiceClient = createOpenAIRealtimeWebRtcClient({
       baseUrl: apiBaseUrl,
       sessionId: currentSessionId
     });
     voiceClientRef.current = voiceClient;
+    voiceToolBridgeRef.current = createOpenAIRealtimeToolBridge({
+      sessionId: currentSessionId,
+      baseUrl: apiBaseUrl,
+      voiceClient,
+      onToolResult: applyToolResult,
+      onActivity: (activity) => {
+        setVoiceToolActivities((current) => upsertToolActivity(current, activity).slice(0, 6));
+      }
+    });
     voiceUnsubscribersRef.current = [
       voiceClient.onStateChange(setVoiceState),
       voiceClient.onTranscript((entry) => {
@@ -426,12 +444,16 @@ export default function App() {
     if (clearHistory) {
       setVoiceTranscripts([]);
       setVoiceEvents([]);
+      setVoiceToolActivities([]);
     }
 
     setVoiceState(nextState);
   }
 
   function disposeVoiceClient() {
+    voiceToolBridgeRef.current?.dispose();
+    voiceToolBridgeRef.current = null;
+
     for (const unsubscribe of voiceUnsubscribersRef.current) {
       unsubscribe();
     }
@@ -584,6 +606,7 @@ export default function App() {
             voiceState={voiceState}
             transcripts={voiceTranscripts}
             events={voiceEvents}
+            toolActivities={voiceToolActivities}
             canStart={canStartVoice}
             canStop={canStopVoice}
             onStartVoice={handleStartVoice}
@@ -805,6 +828,7 @@ function VoicePanel({
   voiceState,
   transcripts,
   events,
+  toolActivities,
   canStart,
   canStop,
   onStartVoice,
@@ -813,6 +837,7 @@ function VoicePanel({
   voiceState: OpenAIRealtimeVoiceConnectionState;
   transcripts: OpenAIRealtimeTranscriptEntry[];
   events: OpenAIRealtimeEventLogEntry[];
+  toolActivities: OpenAIRealtimeToolActivity[];
   canStart: boolean;
   canStop: boolean;
   onStartVoice: () => void;
@@ -876,6 +901,28 @@ function VoicePanel({
             <ul className="voice-event-list">
               {events.map((event) => (
                 <li key={event.id}>{event.type}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="voice-section">
+          <div className="voice-section-header">
+            <h3>AI tools</h3>
+            <span className="inline-status">{toolActivities.length}</span>
+          </div>
+          {toolActivities.length === 0 ? (
+            <p className="state-message voice-empty">Нет вызовов</p>
+          ) : (
+            <ul className="voice-tool-list">
+              {toolActivities.map((activity) => (
+                <li key={activity.callId}>
+                  <strong>{activity.name}</strong>
+                  <span className={`status-badge status-badge--tool-${activity.status}`}>
+                    {translateToolActivityStatus(activity.status)}
+                  </span>
+                  {activity.message ? <em>{activity.message}</em> : null}
+                </li>
               ))}
             </ul>
           )}
@@ -1221,6 +1268,19 @@ function translateVoiceStatus(status: OpenAIRealtimeVoiceConnectionState["status
   }
 }
 
+function translateToolActivityStatus(status: OpenAIRealtimeToolActivity["status"]): string {
+  switch (status) {
+    case "running":
+      return "в работе";
+    case "completed":
+      return "готово";
+    case "error":
+      return "ошибка";
+    default:
+      return status;
+  }
+}
+
 function upsertTranscriptEntry(
   entries: OpenAIRealtimeTranscriptEntry[],
   entry: OpenAIRealtimeTranscriptEntry
@@ -1234,6 +1294,16 @@ function upsertTranscriptEntry(
   updated[existingIndex] = entry;
 
   return updated;
+}
+
+function upsertToolActivity(
+  activities: OpenAIRealtimeToolActivity[],
+  activity: OpenAIRealtimeToolActivity
+): OpenAIRealtimeToolActivity[] {
+  return [
+    activity,
+    ...activities.filter((current) => current.callId !== activity.callId)
+  ];
 }
 
 function translateFieldStatus(status: string): string {
