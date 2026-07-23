@@ -95,7 +95,9 @@ public static class OpenAIRealtimeEndpoints
         }
         catch (OpenAIRealtimeApiException exception)
         {
-            return ApiProblemDetails.OpenAIRealtimeRequestFailed(exception.StatusCode);
+            return ApiProblemDetails.OpenAIRealtimeRequestFailed(
+                exception.StatusCode,
+                exception.ResponseBody);
         }
         catch (HttpRequestException)
         {

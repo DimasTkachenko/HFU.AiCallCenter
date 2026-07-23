@@ -166,6 +166,38 @@ public sealed class OpenAIRealtimeEndpointTests : IClassFixture<WebApplicationFa
     }
 
     [Fact]
+    public async Task PostRealtimeCallApiFailureIncludesOpenAIMessage()
+    {
+        const string openAIResponseBody =
+            """
+            {
+              "error": {
+                "message": "Invalid value for 'session.audio.input.turn_detection.idle_timeout_ms'.",
+                "type": "invalid_request_error",
+                "param": "session.audio.input.turn_detection.idle_timeout_ms",
+                "code": "invalid_value"
+              }
+            }
+            """;
+        using var client = CreateClientWithRealtimeClient(
+            new CapturingOpenAIRealtimeClient(
+                exception: new OpenAIRealtimeApiException(400, openAIResponseBody)));
+        var sessionId = await ApiIntegrationTestHelpers.CreateSessionAsync(client);
+
+        using var response = await client.PostAsync(
+            $"/api/conversation-sessions/{sessionId}/realtime/calls",
+            SdpContent("offer-sdp"));
+
+        Assert.Equal(HttpStatusCode.BadGateway, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+
+        using var document = await ApiIntegrationTestHelpers.ReadJsonAsync(response);
+        var detail = document.RootElement.GetProperty("detail").GetString();
+        Assert.Contains("OpenAI Realtime returned HTTP 400.", detail);
+        Assert.Contains("Invalid value for 'session.audio.input.turn_detection.idle_timeout_ms'.", detail);
+    }
+
+    [Fact]
     public async Task PostRealtimeCallIsRateLimitedPerSession()
     {
         using var client = CreateClientWithRealtimeClient(

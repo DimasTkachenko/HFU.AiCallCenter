@@ -1,9 +1,12 @@
 namespace Hfu.VoiceRegistration.Api.Endpoints;
 
+using System.Text.Json;
 using Hfu.VoiceRegistration.Domain.Conversations;
 
 public static class ApiProblemDetails
 {
+    private const int MaxOpenAIResponseDetailCharacters = 500;
+
     public static IResult SessionNotFound(Guid sessionId)
     {
         return Results.Problem(
@@ -54,12 +57,21 @@ public static class ApiProblemDetails
             detail: detail);
     }
 
-    public static IResult OpenAIRealtimeRequestFailed(int openAIStatusCode)
+    public static IResult OpenAIRealtimeRequestFailed(
+        int openAIStatusCode,
+        string? openAIResponseBody = null)
     {
+        var detail = $"OpenAI Realtime returned HTTP {openAIStatusCode}.";
+        var openAIMessage = ExtractOpenAIErrorMessage(openAIResponseBody);
+        if (!string.IsNullOrWhiteSpace(openAIMessage))
+        {
+            detail = $"{detail} OpenAI message: {openAIMessage}";
+        }
+
         return Results.Problem(
             statusCode: StatusCodes.Status502BadGateway,
             title: "OpenAI Realtime request failed",
-            detail: $"OpenAI Realtime returned HTTP {openAIStatusCode}.");
+            detail: detail);
     }
 
     public static IResult OpenAIRealtimeTransportFailed()
@@ -68,5 +80,43 @@ public static class ApiProblemDetails
             statusCode: StatusCodes.Status502BadGateway,
             title: "OpenAI Realtime request failed",
             detail: "OpenAI Realtime could not be reached.");
+    }
+
+    private static string? ExtractOpenAIErrorMessage(string? responseBody)
+    {
+        if (string.IsNullOrWhiteSpace(responseBody))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(responseBody);
+            if (document.RootElement.TryGetProperty("error", out var error)
+                && error.TryGetProperty("message", out var message)
+                && message.ValueKind == JsonValueKind.String)
+            {
+                return TruncateOpenAIMessage(message.GetString());
+            }
+        }
+        catch (JsonException)
+        {
+            return TruncateOpenAIMessage(responseBody);
+        }
+
+        return TruncateOpenAIMessage(responseBody);
+    }
+
+    private static string? TruncateOpenAIMessage(string? message)
+    {
+        var trimmed = message?.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+        {
+            return null;
+        }
+
+        return trimmed.Length > MaxOpenAIResponseDetailCharacters
+            ? $"{trimmed[..MaxOpenAIResponseDetailCharacters]}..."
+            : trimmed;
     }
 }

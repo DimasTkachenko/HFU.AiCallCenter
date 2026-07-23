@@ -13,7 +13,7 @@ public sealed class OpenAIRealtimeOptions
     private const double DefaultRealtimeServerVadThreshold = 0.5d;
     private const int DefaultRealtimeServerVadPrefixPaddingMs = 300;
     private const int DefaultRealtimeServerVadSilenceDurationMs = 700;
-    private const int DefaultRealtimeServerVadIdleTimeoutMs = 4_000;
+    private const int DefaultRealtimeServerVadIdleTimeoutMs = 5_000;
     public string? ApiKey { get; set; }
 
     public string? BaseUrl { get; set; }
