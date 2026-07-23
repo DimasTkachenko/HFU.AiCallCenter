@@ -44,6 +44,9 @@ import type {
 
 const sessionStorageKey = "hfu.voiceRegistration.sessionId";
 
+const startInterviewInstructions =
+  "Start the HFU demo registration interview now. Speak Ukrainian. First call get_registration_state, then ask the first needed registration question. Do not wait for the user to speak first.";
+
 type HealthState =
   | { kind: "loading" }
   | { kind: "healthy"; health: HealthResponse }
@@ -421,6 +424,12 @@ export default function App() {
 
     try {
       await voiceClient.start();
+      voiceClient.sendEvent({
+        type: "response.create",
+        response: {
+          instructions: startInterviewInstructions
+        }
+      });
     } catch (error: unknown) {
       disposeVoiceClient();
       const problemDetails = toProblem(error, "Не удалось запустить голосовую связь.");

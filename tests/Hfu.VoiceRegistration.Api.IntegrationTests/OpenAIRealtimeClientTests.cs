@@ -44,6 +44,13 @@ public sealed class OpenAIRealtimeClientTests
         Assert.Contains("\"model\":\"gpt-realtime-2.1\"", handler.Body);
         Assert.Contains("\"voice\":\"marin\"", handler.Body);
         Assert.Contains("gpt-realtime-whisper", handler.Body);
+        Assert.Contains("\"turn_detection\":{\"type\":\"server_vad\"", handler.Body);
+        Assert.Contains("\"threshold\":0.5", handler.Body);
+        Assert.Contains("\"prefix_padding_ms\":300", handler.Body);
+        Assert.Contains("\"silence_duration_ms\":700", handler.Body);
+        Assert.Contains("\"idle_timeout_ms\":4000", handler.Body);
+        Assert.Contains("\"create_response\":true", handler.Body);
+        Assert.Contains("\"interrupt_response\":true", handler.Body);
         Assert.Contains("\"tool_choice\":\"auto\"", handler.Body);
         Assert.Contains("Prompt-Version: stage-12-registration-interview-v1", handler.Body);
         Assert.Contains("Speak to the user only in Ukrainian.", handler.Body);
@@ -73,6 +80,9 @@ public sealed class OpenAIRealtimeClientTests
         Assert.Contains("mark_fields_for_clarification", instructions);
         Assert.Contains("complete_registration", instructions);
         Assert.Contains("Do not call complete_registration until", instructions);
+        Assert.Contains("Active interviewer mode:", instructions);
+        Assert.Contains("After any tool result, continue the interview immediately.", instructions);
+        Assert.Contains("On the first idle timeout, briefly repeat or rephrase the current question.", instructions);
         Assert.Contains("firstName", instructions);
         Assert.Contains("lastName", instructions);
         Assert.Contains("dateOfBirth", instructions);

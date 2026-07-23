@@ -127,6 +127,29 @@ describe("createOpenAIRealtimeWebRtcClient", () => {
     });
   });
 
+  it("queues client events until the realtime data channel opens", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response("answer-sdp", { status: 200 }))
+    );
+    const peerConnection = new FakePeerConnection();
+    const client = createOpenAIRealtimeWebRtcClient({
+      sessionId: "88888888-8888-8888-8888-888888888888",
+      mediaDevices: fakeMediaDevices(),
+      peerConnectionFactory: () => peerConnection as unknown as RTCPeerConnection,
+      audioElementFactory: () => fakeAudioElement()
+    });
+    await client.start();
+
+    client.sendEvent({ type: "response.create" });
+
+    expect(peerConnection.dataChannels[0].sentMessages).toEqual([]);
+    peerConnection.dataChannels[0].open();
+    expect(peerConnection.dataChannels[0].sentMessages).toEqual([
+      JSON.stringify({ type: "response.create" })
+    ]);
+  });
+
   it("turns finalized realtime function arguments into tool-call events", async () => {
     vi.stubGlobal(
       "fetch",
@@ -343,16 +366,33 @@ class FakePeerConnection {
 class FakeDataChannel {
   public closed = false;
 
+  public readyState: RTCDataChannelState = "connecting";
+
   public onmessage: ((event: MessageEvent<string>) => void) | null = null;
+
+  public onopen: ((event: Event) => void) | null = null;
+
+  public sentMessages: string[] = [];
 
   constructor(public readonly label: string) {
   }
 
-  send() {
+  send(message: string) {
+    if (this.readyState !== "open") {
+      throw new Error("Data channel is not open.");
+    }
+
+    this.sentMessages.push(message);
+  }
+
+  open() {
+    this.readyState = "open";
+    this.onopen?.(new Event("open"));
   }
 
   close() {
     this.closed = true;
+    this.readyState = "closed";
   }
 
   emit(payload: unknown) {

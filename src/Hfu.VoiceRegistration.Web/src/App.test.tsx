@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import type {
@@ -206,6 +206,14 @@ describe("App", () => {
       })
     );
     expect(openAIRealtimeClientMock.client.start).toHaveBeenCalled();
+    await waitFor(() => {
+      expect(openAIRealtimeClientMock.client.sendEvent).toHaveBeenCalledWith({
+        type: "response.create",
+        response: {
+          instructions: expect.stringContaining("Start the HFU demo registration interview now")
+        }
+      });
+    });
     expect(await screen.findByText("голос подключён")).toBeInTheDocument();
   });
 
@@ -303,7 +311,10 @@ describe("App", () => {
       })
     );
     expect(openAIRealtimeClientMock.client.sendEvent).toHaveBeenCalledWith({
-      type: "response.create"
+      type: "response.create",
+      response: {
+        instructions: expect.stringContaining("Continue the registration interview immediately")
+      }
     });
   });
 
@@ -523,6 +534,7 @@ function toolResult(overrides: Partial<Record<string, unknown>> = {}) {
     state: emptyState(),
     errors: [],
     completion: null,
+    recommendedNextAction: null,
     ...overrides
   };
 }

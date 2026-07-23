@@ -75,7 +75,13 @@ public sealed class OpenAIRealtimeClient : IOpenAIRealtimeClient
                     Transcription: new OpenAIRealtimeInputTranscriptionRequest(
                         Model: options.EffectiveRealtimeInputTranscriptionModel),
                     TurnDetection: new OpenAIRealtimeTurnDetectionRequest(
-                        Type: "server_vad")),
+                        Type: "server_vad",
+                        Threshold: options.EffectiveRealtimeServerVadThreshold,
+                        PrefixPaddingMs: options.EffectiveRealtimeServerVadPrefixPaddingMs,
+                        SilenceDurationMs: options.EffectiveRealtimeServerVadSilenceDurationMs,
+                        IdleTimeoutMs: options.EffectiveRealtimeServerVadIdleTimeoutMs,
+                        CreateResponse: true,
+                        InterruptResponse: true)),
                 Output: new OpenAIRealtimeAudioOutputRequest(
                     Voice: options.EffectiveRealtimeVoice)),
             Tools: CreateRegistrationTools(),
@@ -102,7 +108,19 @@ public sealed class OpenAIRealtimeClient : IOpenAIRealtimeClient
 
     private sealed record OpenAIRealtimeInputTranscriptionRequest(string Model);
 
-    private sealed record OpenAIRealtimeTurnDetectionRequest(string Type);
+    private sealed record OpenAIRealtimeTurnDetectionRequest(
+        string Type,
+        double Threshold,
+        [property: JsonPropertyName("prefix_padding_ms")]
+        int PrefixPaddingMs,
+        [property: JsonPropertyName("silence_duration_ms")]
+        int SilenceDurationMs,
+        [property: JsonPropertyName("idle_timeout_ms")]
+        int IdleTimeoutMs,
+        [property: JsonPropertyName("create_response")]
+        bool CreateResponse,
+        [property: JsonPropertyName("interrupt_response")]
+        bool InterruptResponse);
 
     private sealed record OpenAIRealtimeAudioOutputRequest(string Voice);
 

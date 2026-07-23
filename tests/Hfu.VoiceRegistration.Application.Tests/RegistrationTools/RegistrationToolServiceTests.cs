@@ -320,6 +320,117 @@ public sealed class RegistrationToolServiceTests
     }
 
     [Fact]
+    public async Task GetRegistrationStateRecommendsFirstMissingRegistrationField()
+    {
+        var now = new DateTimeOffset(2026, 7, 22, 10, 0, 0, TimeSpan.Zero);
+        var store = new FakeConversationSessionStore();
+        var session = ConversationSession.Create(now);
+        await store.CreateAsync(session, CancellationToken.None);
+        var service = CreateService(store, now);
+
+        var result = await service.GetRegistrationStateAsync(session.SessionId, CancellationToken.None);
+
+        Assert.NotNull(result.RecommendedNextAction);
+        Assert.Equal("AskField", result.RecommendedNextAction.Type);
+        Assert.Equal(RegistrationFieldNames.FirstName, result.RecommendedNextAction.FieldName);
+        Assert.Contains(RegistrationFieldNames.FirstName, result.RecommendedNextAction.Instruction);
+    }
+
+    [Fact]
+    public async Task GetRegistrationStateRecommendsClarificationBeforeCollectingMoreFields()
+    {
+        var now = new DateTimeOffset(2026, 7, 22, 10, 0, 0, TimeSpan.Zero);
+        var store = new FakeConversationSessionStore();
+        var session = ConversationSession.Create(now) with
+        {
+            RegistrationDraft = RegistrationDraft.Create() with
+            {
+                PhoneNumber = RegistrationField<string>.NeedsClarification(
+                    "+380501112233",
+                    "Last two digits were unclear.")
+            }
+        };
+        await store.CreateAsync(session, CancellationToken.None);
+        var service = CreateService(store, now);
+
+        var result = await service.GetRegistrationStateAsync(session.SessionId, CancellationToken.None);
+
+        Assert.NotNull(result.RecommendedNextAction);
+        Assert.Equal("ClarifyField", result.RecommendedNextAction.Type);
+        Assert.Equal(RegistrationFieldNames.PhoneNumber, result.RecommendedNextAction.FieldName);
+        Assert.Contains("clarify", result.RecommendedNextAction.Instruction);
+    }
+
+    [Fact]
+    public async Task GetRegistrationStateRecommendsConfirmationBeforeConsent()
+    {
+        var now = new DateTimeOffset(2026, 7, 22, 10, 0, 0, TimeSpan.Zero);
+        var store = new FakeConversationSessionStore();
+        var session = ConversationSession.Create(now) with
+        {
+            RegistrationDraft = CompleteDraft() with
+            {
+                PhoneNumber = RegistrationField<string>.Captured("+380501112233"),
+                PersonalDataConsent = false,
+                RegistrationConfirmed = false
+            }
+        };
+        await store.CreateAsync(session, CancellationToken.None);
+        var service = CreateService(store, now);
+
+        var result = await service.GetRegistrationStateAsync(session.SessionId, CancellationToken.None);
+
+        Assert.NotNull(result.RecommendedNextAction);
+        Assert.Equal("ConfirmField", result.RecommendedNextAction.Type);
+        Assert.Equal(RegistrationFieldNames.PhoneNumber, result.RecommendedNextAction.FieldName);
+        Assert.Contains("confirm", result.RecommendedNextAction.Instruction);
+    }
+
+    [Fact]
+    public async Task GetRegistrationStateRecommendsConsentBeforeFinalConfirmation()
+    {
+        var now = new DateTimeOffset(2026, 7, 22, 10, 0, 0, TimeSpan.Zero);
+        var store = new FakeConversationSessionStore();
+        var session = ConversationSession.Create(now) with
+        {
+            RegistrationDraft = CompleteDraft() with
+            {
+                PersonalDataConsent = false,
+                RegistrationConfirmed = false
+            }
+        };
+        await store.CreateAsync(session, CancellationToken.None);
+        var service = CreateService(store, now);
+
+        var result = await service.GetRegistrationStateAsync(session.SessionId, CancellationToken.None);
+
+        Assert.NotNull(result.RecommendedNextAction);
+        Assert.Equal("AskPersonalDataConsent", result.RecommendedNextAction.Type);
+        Assert.Equal(RegistrationFieldNames.PersonalDataConsent, result.RecommendedNextAction.FieldName);
+        Assert.Contains("consent", result.RecommendedNextAction.Instruction);
+    }
+
+    [Fact]
+    public async Task GetRegistrationStateRecommendsCompletionWhenBackendAllowsCompletion()
+    {
+        var now = new DateTimeOffset(2026, 7, 22, 10, 0, 0, TimeSpan.Zero);
+        var store = new FakeConversationSessionStore();
+        var session = ConversationSession.Create(now) with
+        {
+            RegistrationDraft = CompleteDraft()
+        };
+        await store.CreateAsync(session, CancellationToken.None);
+        var service = CreateService(store, now);
+
+        var result = await service.GetRegistrationStateAsync(session.SessionId, CancellationToken.None);
+
+        Assert.NotNull(result.RecommendedNextAction);
+        Assert.Equal("CompleteRegistration", result.RecommendedNextAction.Type);
+        Assert.Null(result.RecommendedNextAction.FieldName);
+        Assert.Contains("complete_registration", result.RecommendedNextAction.Instruction);
+    }
+
+    [Fact]
     public async Task GetRegistrationStateReturnsSessionNotFoundErrorForUnknownSession()
     {
         var store = new FakeConversationSessionStore();

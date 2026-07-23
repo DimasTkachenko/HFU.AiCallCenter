@@ -3,7 +3,8 @@ namespace Hfu.VoiceRegistration.Application.RegistrationTools;
 public sealed record RegistrationToolResult(
     RegistrationStateSnapshot? State,
     IReadOnlyList<RegistrationToolError> Errors,
-    RegistrationCompletionDetails? Completion = null)
+    RegistrationCompletionDetails? Completion = null,
+    RegistrationRecommendedNextAction? RecommendedNextAction = null)
 {
     public bool Succeeded => Errors.Count == 0;
 
@@ -15,7 +16,8 @@ public sealed record RegistrationToolResult(
         return new RegistrationToolResult(
             state,
             Array.Empty<RegistrationToolError>(),
-            completion);
+            completion,
+            RegistrationNextActionAdvisor.Recommend(state, completion));
     }
 
     public static RegistrationToolResult Failure(
@@ -24,6 +26,10 @@ public sealed record RegistrationToolResult(
         RegistrationCompletionDetails? completion = null)
     {
         ArgumentNullException.ThrowIfNull(errors);
-        return new RegistrationToolResult(state, errors, completion);
+        return new RegistrationToolResult(
+            state,
+            errors,
+            completion,
+            RegistrationNextActionAdvisor.Recommend(state, completion));
     }
 }

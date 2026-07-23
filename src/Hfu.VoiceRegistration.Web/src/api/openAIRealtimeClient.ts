@@ -51,6 +51,7 @@ export function createOpenAIRealtimeWebRtcClient(
   let abortController: AbortController | null = null;
   let isStopped = false;
   let startVersion = 0;
+  let pendingDataChannelMessages: string[] = [];
 
   function emitState(state: OpenAIRealtimeVoiceConnectionState) {
     for (const handler of stateHandlers) {
@@ -115,6 +116,7 @@ export function createOpenAIRealtimeWebRtcClient(
 
       dataChannel = peerConnection.createDataChannel("oai-events");
       dataChannel.onmessage = handleDataChannelMessage;
+      dataChannel.onopen = flushPendingDataChannelMessages;
 
       const offer = await peerConnection.createOffer();
       if (!isCurrentStart(currentStartVersion)) {
@@ -182,7 +184,30 @@ export function createOpenAIRealtimeWebRtcClient(
       throw new Error("Realtime data channel is not connected.");
     }
 
-    dataChannel.send(JSON.stringify(event));
+    const message = JSON.stringify(event);
+    if (dataChannel.readyState === "open") {
+      dataChannel.send(message);
+      return;
+    }
+
+    if (dataChannel.readyState === "connecting") {
+      pendingDataChannelMessages.push(message);
+      return;
+    }
+
+    throw new Error("Realtime data channel is not connected.");
+  }
+
+  function flushPendingDataChannelMessages() {
+    if (!dataChannel || dataChannel.readyState !== "open") {
+      return;
+    }
+
+    const messages = pendingDataChannelMessages;
+    pendingDataChannelMessages = [];
+    for (const message of messages) {
+      dataChannel.send(message);
+    }
   }
 
   function cleanup() {
@@ -213,6 +238,7 @@ export function createOpenAIRealtimeWebRtcClient(
     localStream = null;
     assistantDraft = null;
     abortController = null;
+    pendingDataChannelMessages = [];
   }
 
   function isCurrentStart(currentStartVersion: number) {

@@ -107,7 +107,12 @@ describe("createOpenAIRealtimeToolBridge", () => {
             output: JSON.stringify(successToolResult)
           }
         },
-        { type: "response.create" }
+        {
+          type: "response.create",
+          response: {
+            instructions: expect.stringContaining("recommendedNextAction")
+          }
+        }
       ]);
       expect(results).toEqual([successToolResult]);
       expect(activities.map((activity) => activity.status)).toEqual(["running", "completed"]);
@@ -147,7 +152,12 @@ describe("createOpenAIRealtimeToolBridge", () => {
       succeeded: false,
       errors: [{ code: "RealtimeToolUnknown" }]
     });
-    expect(voice.sentEvents[1]).toEqual({ type: "response.create" });
+    expect(voice.sentEvents[1]).toEqual({
+      type: "response.create",
+      response: {
+        instructions: expect.stringContaining("Continue the registration interview immediately")
+      }
+    });
     expect(activities.map((activity) => activity.status)).toEqual(["running", "error"]);
   });
 
@@ -173,7 +183,12 @@ describe("createOpenAIRealtimeToolBridge", () => {
       succeeded: false,
       errors: [{ code: "RealtimeToolArgumentsInvalid" }]
     });
-    expect(voice.sentEvents[1]).toEqual({ type: "response.create" });
+    expect(voice.sentEvents[1]).toEqual({
+      type: "response.create",
+      response: {
+        instructions: expect.stringContaining("Continue the registration interview immediately")
+      }
+    });
   });
 });
 
@@ -190,7 +205,12 @@ const successToolResult: RegistrationToolResult = {
     completionIssues: []
   },
   errors: [],
-  completion: null
+  completion: null,
+  recommendedNextAction: {
+    type: "AskField",
+    fieldName: "lastName",
+    instruction: "Ask the user for lastName. Ask one short question in Ukrainian."
+  }
 };
 
 function fakeRegistrationTools(): OpenAIRealtimeRegistrationToolClient {

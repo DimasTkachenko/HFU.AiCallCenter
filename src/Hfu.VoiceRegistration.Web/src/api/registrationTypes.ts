@@ -69,6 +69,7 @@ export interface RegistrationToolResult {
   state: RegistrationStateSnapshot | null;
   errors: RegistrationToolError[];
   completion?: RegistrationCompletionDetails | null;
+  recommendedNextAction?: RegistrationRecommendedNextAction | null;
 }
 
 export interface RegistrationToolError {
@@ -81,6 +82,12 @@ export interface RegistrationToolError {
 export interface RegistrationCompletionDetails {
   finalRegistration: FinalRegistrationDto;
   registrationResult: RegistrationResult;
+}
+
+export interface RegistrationRecommendedNextAction {
+  type: string;
+  fieldName?: string | null;
+  instruction: string;
 }
 
 export interface FinalRegistrationDto {

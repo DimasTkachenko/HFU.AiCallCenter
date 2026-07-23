@@ -86,6 +86,9 @@ const defaultRegistrationTools: OpenAIRealtimeRegistrationToolClient = {
   completeRegistration
 };
 
+const toolContinuationInstructions =
+  "Continue the registration interview immediately. Read recommendedNextAction from the latest tool result if present, follow it now, and phrase the next step naturally in Ukrainian. If recommendedNextAction is missing, use the backend state and errors to ask the next specific registration question. Do not wait for the user.";
+
 export function createOpenAIRealtimeToolBridge(
   options: OpenAIRealtimeToolBridgeOptions
 ): OpenAIRealtimeToolBridge {
@@ -137,7 +140,12 @@ export function createOpenAIRealtimeToolBridge(
         output: JSON.stringify(result)
       }
     });
-    options.voiceClient.sendEvent({ type: "response.create" });
+    options.voiceClient.sendEvent({
+      type: "response.create",
+      response: {
+        instructions: toolContinuationInstructions
+      }
+    });
 
     emitActivity(toolCall, {
       status,

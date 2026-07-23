@@ -10,6 +10,10 @@ public sealed class OpenAIRealtimeOptions
     private const string DefaultRealtimeInputTranscriptionModel = "gpt-realtime-whisper";
     private const int DefaultRealtimeMaxSdpOfferCharacters = 131_072;
     private const int DefaultRealtimeCallsPerMinute = 12;
+    private const double DefaultRealtimeServerVadThreshold = 0.5d;
+    private const int DefaultRealtimeServerVadPrefixPaddingMs = 300;
+    private const int DefaultRealtimeServerVadSilenceDurationMs = 700;
+    private const int DefaultRealtimeServerVadIdleTimeoutMs = 4_000;
     public string? ApiKey { get; set; }
 
     public string? BaseUrl { get; set; }
@@ -25,6 +29,14 @@ public sealed class OpenAIRealtimeOptions
     public int? RealtimeCallsPerMinute { get; set; }
 
     public string? RealtimeInstructions { get; set; }
+
+    public double? RealtimeServerVadThreshold { get; set; }
+
+    public int? RealtimeServerVadPrefixPaddingMs { get; set; }
+
+    public int? RealtimeServerVadSilenceDurationMs { get; set; }
+
+    public int? RealtimeServerVadIdleTimeoutMs { get; set; }
 
     public string EffectiveBaseUrl => ValueOrDefault(BaseUrl, DefaultBaseUrl).TrimEnd('/');
 
@@ -47,6 +59,26 @@ public sealed class OpenAIRealtimeOptions
 
     public string EffectiveRealtimeInstructions =>
         ValueOrDefault(RealtimeInstructions, OpenAIRealtimeRegistrationPrompt.CurrentInstructions);
+
+    public double EffectiveRealtimeServerVadThreshold =>
+        RealtimeServerVadThreshold is > 0 and <= 1
+            ? RealtimeServerVadThreshold.Value
+            : DefaultRealtimeServerVadThreshold;
+
+    public int EffectiveRealtimeServerVadPrefixPaddingMs =>
+        RealtimeServerVadPrefixPaddingMs is >= 0
+            ? RealtimeServerVadPrefixPaddingMs.Value
+            : DefaultRealtimeServerVadPrefixPaddingMs;
+
+    public int EffectiveRealtimeServerVadSilenceDurationMs =>
+        RealtimeServerVadSilenceDurationMs is > 0
+            ? RealtimeServerVadSilenceDurationMs.Value
+            : DefaultRealtimeServerVadSilenceDurationMs;
+
+    public int EffectiveRealtimeServerVadIdleTimeoutMs =>
+        RealtimeServerVadIdleTimeoutMs is > 0
+            ? RealtimeServerVadIdleTimeoutMs.Value
+            : DefaultRealtimeServerVadIdleTimeoutMs;
 
     private static string ValueOrDefault(string? value, string fallback)
     {
