@@ -35,12 +35,13 @@ Primary principle:
 - OpenAI owns speech-to-speech processing.
 - Browser owns WebRTC audio transport and UI display.
 
-Future flow:
+Current/future flow:
 
-- Browser connects to OpenAI Realtime API through WebRTC.
-- Backend issues safe short-lived Realtime credentials/configuration.
+- Browser creates a WebRTC offer for OpenAI Realtime.
+- Backend proxies the SDP offer to OpenAI `POST /v1/realtime/calls` with the server-side API key.
+- Browser receives only the SDP answer required to finish the WebRTC connection.
 - OpenAI Realtime model conducts the spoken conversation.
-- Tool calls are routed through the browser data channel to backend handlers.
+- Future tool calls are routed through the browser data channel to backend handlers.
 - Backend validates and updates registration state.
 - SignalR pushes live state and diagnostic updates to the frontend.
 - Fake HFU registration service returns a demo registration ID after successful validation and confirmation.
@@ -142,7 +143,259 @@ After Stage 1, the technical specification outlines these later stages:
 - Stage 14: developer panel.
 - Stage 15: final testing and demo polish.
 
-Do not move to Stage 2 or beyond without a separate request.
+Stage 2 was separately requested and uses the conservative completion rule approved on 2026-07-22.
+
+## Stage 2 Scope
+
+Stage 2 implements pure domain model and validation rules:
+
+- `RegistrationField<T>` and `RegistrationFieldStatus`.
+- `UserCategory`.
+- `RegistrationDraft`.
+- `ConversationSession` domain concept.
+- `RegistrationValidationResult` and validation issues.
+- Completion eligibility rules covered by unit tests.
+
+Approved conservative completion rule:
+
+- universally required fields must be filled and not `Missing`, `NeedsClarification`, or `Rejected`;
+- conditionally required fields must be filled when applicable;
+- `phoneNumber`, `dateOfBirth`, `currentRegion`, `currentCity`, and `userCategory` must be `Confirmed`;
+- `email`, when provided, must be `Confirmed`;
+- optional fields do not block completion when `Missing` or `Rejected`;
+- `InternallyDisplacedPerson` requires `regionBeforeWar` and `displacedCertificateYear`;
+- `personalDataConsent` and `registrationConfirmed` must both be `true`.
+
+Stage 2 must not add HTTP APIs, stores, OpenAI, WebRTC, SignalR, fake HFU registration, databases, Redis, or production HFU integration.
+
+Stage 3 was separately requested and adds in-memory session management with a dedicated `Hfu.VoiceRegistration.Infrastructure.Tests` project.
+
+## Stage 3 Scope
+
+Stage 3 implements:
+
+- application-level `IConversationSessionStore`;
+- `ConversationSessionStoreOptions`;
+- infrastructure-level `InMemoryConversationSessionStore`;
+- per-session locking for mutations;
+- versioning for successful mutation updates;
+- event journal persistence as part of `ConversationSession`;
+- expiration for unfinished and completed sessions;
+- hosted cleanup service;
+- infrastructure tests for store behavior and DI registration.
+
+Default timeout values:
+
+- unfinished inactive session: 30 minutes;
+- completed session: 60 minutes;
+- cleanup interval: 5 minutes.
+
+Stage 3 still must not add HTTP APIs, OpenAI, WebRTC, SignalR, fake HFU registration, EF Core, databases, Redis, or production HFU integration.
+
+Stage 4 was separately requested and implements application-level backend registration tools with the conservative scope approved on 2026-07-22.
+
+## Stage 4 Scope
+
+Stage 4 implements:
+
+- `IRegistrationToolService`;
+- `update_registration_fields`;
+- `confirm_registration_fields`;
+- `mark_fields_for_clarification`;
+- `clear_registration_fields`;
+- `get_registration_state`;
+- field registry for all known registration field names;
+- basic normalization and strict typed validation;
+- structured tool result DTOs with current state and errors;
+- Application tests for direct tool-handler usage without HTTP or OpenAI.
+
+Confirmed Stage 4 boundary:
+
+- do not add OpenAI SDK, Realtime API, WebRTC, SignalR, HTTP registration endpoints, fake HFU registration, EF Core, databases, Redis, or production HFU integration;
+- defer actual `complete_registration` submission until the fake HFU/API stages;
+- keep `registrationCanBeCompleted` in state so the future completion handler can reuse the existing validation.
+
+Stage 5 was separately requested and implements reference data for regions.
+
+## Stage 5 Scope
+
+Stage 5 implements:
+
+- Ukrainian region reference data;
+- Ukrainian canonical names in stored draft values;
+- Russian and Ukrainian aliases;
+- `IRegionReferenceDataProvider`;
+- `IRegionResolver`;
+- exact and conservative fuzzy matching;
+- `Resolved`, `Ambiguous`, and `NotFound` results;
+- integration with `update_registration_fields` for `currentRegion` and `regionBeforeWar`;
+- structured `RegionAmbiguous` and `RegionNotFound` tool errors;
+- suggestions for ambiguous matches;
+- server-owned `ReferenceId` on registration fields;
+- Application tests for resolver behavior and tool integration.
+
+Confirmed Stage 5 boundary:
+
+- do not add HTTP reference data endpoints until Stage 7;
+- do not add OpenAI SDK, Realtime API, WebRTC, SignalR, fake HFU registration, EF Core, databases, Redis, or production HFU integration;
+- do not accept model-generated region IDs as aliases;
+- ambiguous and unknown regions must be persisted as `NeedsClarification`, not silently ignored.
+
+Stage 6 was separately requested and implements fake HFU registration completion.
+
+## Stage 6 Scope
+
+Stage 6 implements:
+
+- application-level `complete_registration`;
+- `CompleteRegistrationRequest` with only `personalDataConsent` and `registrationConfirmed`;
+- backend-owned final registration DTO mapping from `RegistrationDraft`;
+- `IFakeHfuRegistrationService`;
+- in-memory demo registration ID generation with `DEMO-{year}-{counter:000000}`;
+- fake HFU registration response with success, registration ID, message, and completion time;
+- storing `RegistrationResult` on successful completion;
+- repeated completion protection returning `RegistrationAlreadyCompleted` with the existing result/state;
+- Application and Infrastructure tests for completion behavior and fake service behavior.
+
+Confirmed Stage 6 boundary:
+
+- do not add HTTP registration endpoints until Stage 7;
+- do not add OpenAI SDK, Realtime API, WebRTC, SignalR, EF Core, databases, Redis, or production HFU integration;
+- do not accept a final registration DTO from the model or caller;
+- do not generate a new ID for already completed sessions;
+- do not add an artificial fake-service failure scenario.
+
+Stage 7 was separately requested and implements the backend HTTP API.
+
+## Stage 7 Scope
+
+Stage 7 implements:
+
+- typed REST endpoints for creating, reading, and abandoning conversation sessions;
+- typed REST endpoints for all backend registration tools;
+- HTTP exposure of `complete_registration` with only `personalDataConsent` and `registrationConfirmed`;
+- `GET /api/reference-data/regions`;
+- Swagger/OpenAPI for visual/manual testing;
+- Problem Details for HTTP-layer errors;
+- structured `RegistrationToolResult` payloads for business/tool errors;
+- API integration tests for session, tool, completion, reference data, Swagger, and error behavior.
+
+Confirmed Stage 7 boundary:
+
+- do not add OpenAI SDK, Realtime API, WebRTC, SignalR, EF Core, databases, Redis, React registration UI, or production HFU integration;
+- do not add a generic JSON tool dispatcher;
+- do not accept final registration DTOs from HTTP clients;
+- full registration flow should be testable through Swagger/Postman without OpenAI.
+
+Stage 8 was separately requested and implements React UI without voice.
+
+## Stage 8 Scope
+
+Stage 8 implements:
+
+- React/Vite registration workspace over Stage 7 HTTP endpoints;
+- Russian UI labels;
+- Ukrainian canonical region display values from `GET /api/reference-data/regions`;
+- session creation and `localStorage` restoration;
+- registration state display with field statuses and validation issue lists;
+- manual developer tool-call emulator for update, confirm, mark clarification, clear, get state, complete, and abandon;
+- demo-data fill action for fast manual testing;
+- structured tool error panel;
+- fake HFU registration result panel;
+- frontend tests for API client and UI flows.
+
+Confirmed Stage 8 boundary:
+
+- do not add OpenAI SDK, Realtime API, WebRTC, SignalR, audio capture, transcript UI, EF Core, databases, Redis, or production HFU integration;
+- do not submit final registration DTOs from the frontend;
+- backend remains authoritative for state, validation, completion, and fake HFU registration.
+
+Stage 9 was separately requested and implements SignalR live updates with the recommended lightweight-event approach.
+
+## Stage 9 Scope
+
+Stage 9 implements:
+
+- ASP.NET Core SignalR hub at `/hubs/conversation`;
+- session-scoped hub groups through `JoinSession(Guid)` and `LeaveSession(Guid)`;
+- typed backend realtime events after session create, abandon, registration tool mutations, validation failures, state reads, and completion;
+- React SignalR client wrapper using `@microsoft/signalr`;
+- Vite proxy support for `/hubs`;
+- browser live status, compact recent-event list, create/restore session group join, reconnect rejoin, and HTTP refresh after live events;
+- backend integration tests and frontend Vitest coverage for the hub/client/UI flow.
+
+Confirmed Stage 9 boundary:
+
+- SignalR events are notifications only, not the source of truth;
+- frontend must refresh full session state through HTTP after relevant live events;
+- do not add OpenAI SDK, Realtime API, WebRTC, microphone capture, audio playback, transcript UI, OpenAI tool-call bridge, EF Core, databases, Redis/backplane, persistent storage, auth, or production HFU integration.
+
+Stage 10 was separately requested and implements OpenAI Realtime WebRTC with the unified SDP proxy approach.
+
+## Stage 10 Scope
+
+Stage 10 implements:
+
+- server-side OpenAI Realtime options bound from `OpenAI` in `appsettings.json`, `appsettings.Development.json`, or environment variables such as `OpenAI__ApiKey`;
+- default model `gpt-realtime-2.1`, voice `marin`, and input transcription model `gpt-realtime-whisper`;
+- backend `IOpenAIRealtimeClient` using `HttpClient` and multipart form data for OpenAI `POST /v1/realtime/calls`;
+- `POST /api/conversation-sessions/{sessionId}/realtime/calls` accepting raw `application/sdp` offers and returning raw `application/sdp` answers;
+- runtime validation for SDP media type and max SDP size, transport-failure `502` mapping, and per-session Realtime call rate limiting;
+- frontend WebRTC client wrapper for microphone capture, remote audio playback, and the `oai-events` data channel;
+- React voice panel with start/stop controls, voice status, Realtime diagnostics, and transcript rendering;
+- backend integration tests and frontend Vitest coverage for request formatting, endpoint behavior, WebRTC lifecycle, transcript parsing, and voice UI.
+
+Confirmed Stage 10 boundary:
+
+- the permanent OpenAI API key exists only on the backend;
+- the React app never receives the OpenAI API key;
+- Stage 10 includes a local rate limit for Realtime call creation, but production abuse prevention still requires later auth/routing hardening;
+- the AI does not update, confirm, clear, clarify, or complete registration fields in Stage 10;
+- OpenAI tool-call bridge and full registration prompt were intentionally deferred after Stage 10 and are tracked in later stages; reconnect hardening, SIP/IP telephony, EF Core, databases, Redis/backplane, persistent storage, auth, and production HFU integration remain deferred.
+
+Stage 11 was separately requested and implements the OpenAI Realtime tool-call bridge.
+
+## Stage 11 Scope
+
+Stage 11 implements:
+
+- Realtime function tool definitions in the backend-owned OpenAI session payload;
+- `tool_choice: "auto"` for the Realtime session;
+- all existing registration tools exposed to the model: `update_registration_fields`, `confirm_registration_fields`, `mark_fields_for_clarification`, `clear_registration_fields`, `get_registration_state`, and `complete_registration`;
+- frontend parsing of Realtime function-call events from the `oai-events` data channel;
+- frontend dispatch from Realtime tool calls to Stage 7 typed HTTP endpoints;
+- structured `function_call_output` responses back to OpenAI;
+- duplicate protection by Realtime `callId`;
+- compact AI tool-call diagnostics in the voice panel.
+
+Confirmed Stage 11 boundary:
+
+- backend registration state remains authoritative;
+- the frontend bridge is transport-aware but business-rule-light;
+- `complete_registration` is exposed but guarded by existing backend validation, consent, final confirmation, and `RegistrationAlreadyCompleted` behavior;
+- Stage 11 does not add the full registration system prompt, reconnect/recovery hardening, developer prompt panel, prompt evals, SIP/IP telephony, EF Core, databases, Redis/backplane, persistent storage, auth, or production HFU integration.
+
+Stage 12 was separately requested and implements the registration system prompt with Ukrainian assistant speech.
+
+## Stage 12 Scope
+
+Stage 12 implements:
+
+- backend-owned versioned default prompt `stage-12-registration-interview-v1`;
+- strict assistant output language: Ukrainian only;
+- accepted user input languages: Ukrainian, Russian, and mixed Ukrainian/Russian;
+- prompt guidance for greeting, demo-data warning, field collection, clarification, critical-field confirmation, final summary, consent, final confirmation, and completion;
+- tool-use rules for `get_registration_state`, `update_registration_fields`, `confirm_registration_fields`, `mark_fields_for_clarification`, `clear_registration_fields`, and `complete_registration`;
+- exact-value rules for `dateOfBirth`, `phoneNumber`, `email`, regions, `userCategory`, and `displacedCertificateYear`;
+- backend tests for default prompt content, session payload content, and custom `OpenAI:RealtimeInstructions` override behavior;
+- README/manual testing documentation for a real OpenAI key and browser microphone.
+
+Confirmed Stage 12 boundary:
+
+- no prompt eval automation yet;
+- no reconnect/recovery hardening yet;
+- no developer prompt panel UI yet;
+- no SIP/IP telephony, EF Core, databases, Redis/backplane, persistent storage, auth, or production HFU integration.
 
 ## Full Technical Specification Highlights
 
@@ -187,7 +440,7 @@ Refer to the extracted text files in `context/` for the complete document text.
 ## Security And Data Rules
 
 - Permanent OpenAI API key must exist only on backend.
-- Frontend receives only short-lived data required for Realtime connection.
+- Frontend receives only Realtime connection data required to complete the WebRTC handshake.
 - Backend must not trust field names, values, types, or statuses from the model without validation.
 - README must say the PoC is not intended to process real personal data.
 - Do not log the full final registration DTO in production-style logs.
