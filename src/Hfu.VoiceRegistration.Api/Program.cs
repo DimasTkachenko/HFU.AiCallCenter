@@ -2,15 +2,24 @@ using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using Hfu.VoiceRegistration.Api.Endpoints;
 using Hfu.VoiceRegistration.Api.OpenAIRealtime;
+using Hfu.VoiceRegistration.Api.GeminiLive; // Added for GeminiLiveOptions and IGeminiLiveClient
+using Hfu.VoiceRegistration.Infrastructure.GeminiLive; // Added for GeminiLiveClient
 using Hfu.VoiceRegistration.Api.Realtime;
 using Hfu.VoiceRegistration.Application;
 using Hfu.VoiceRegistration.Infrastructure;
 using Microsoft.AspNetCore.RateLimiting;
-using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Options; // Added for IOptions
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Configure OpenAI Realtime Options
 builder.Services.Configure<OpenAIRealtimeOptions>(
     builder.Configuration.GetSection(OpenAIRealtimeOptions.SectionName));
+
+// Configure Gemini Live Options
+builder.Services.Configure<GeminiLiveOptions>(
+    builder.Configuration.GetSection(GeminiLiveOptions.SectionName));
+
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
     options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
@@ -23,7 +32,18 @@ builder.Services
     {
         options.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter());
     });
+
+// Register OpenAI Realtime Client
 builder.Services.AddHttpClient<IOpenAIRealtimeClient, OpenAIRealtimeClient>();
+
+// Register Gemini Live Client & Session Handler
+builder.Services.AddScoped<IGeminiLiveClient, GeminiLiveClient>(provider =>
+{
+    var options = provider.GetRequiredService<IOptions<GeminiLiveOptions>>().Value;
+    return new GeminiLiveClient(options.ApiKey ?? string.Empty);
+});
+builder.Services.AddScoped<GeminiLiveSessionHandler>();
+
 builder.Services.AddSingleton<IConversationRealtimeNotifier, SignalRConversationRealtimeNotifier>();
 builder.Services.AddRateLimiter(options =>
 {
@@ -56,7 +76,11 @@ var app = builder.Build();
 
 app.UseSwagger();
 app.UseSwaggerUI();
+app.UseWebSockets();
 app.UseRateLimiter();
+
+app.UseDefaultFiles();
+app.UseStaticFiles();
 
 app.MapGet("/health", () =>
 {
@@ -73,7 +97,10 @@ app.MapConversationSessionEndpoints();
 app.MapRegistrationToolEndpoints();
 app.MapReferenceDataEndpoints();
 app.MapOpenAIRealtimeEndpoints();
+app.MapGeminiLiveEndpoints();
 app.MapHub<ConversationHub>("/hubs/conversation");
+
+app.MapFallbackToFile("index.html");
 
 app.Run();
 

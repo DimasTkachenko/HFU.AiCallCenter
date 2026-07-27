@@ -1,0 +1,104 @@
+name: CI/CD Pipeline & Deploy to Azure
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  backend-ci:
+    name: Build & Test Backend (.NET)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore Hfu.VoiceRegistration.sln
+
+      - name: Build Solution
+        run: dotnet build Hfu.VoiceRegistration.sln --no-restore -c Release
+
+      - name: Run Tests
+        run: dotnet test Hfu.VoiceRegistration.sln --no-build -c Release --verbosity normal
+
+  frontend-ci:
+    name: Build & Test Frontend (React / Vite)
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: src/Hfu.VoiceRegistration.Web
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: src/Hfu.VoiceRegistration.Web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Frontend Tests
+        run: npx vitest run
+
+      - name: Build Frontend
+        run: npm run build
+
+  deploy-to-azure:
+    name: Deploy Unified App to Azure App Service
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [backend-ci, frontend-ci]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: src/Hfu.VoiceRegistration.Web/package-lock.json
+
+      - name: Install & Build Frontend
+        run: |
+          npm ci
+          npm run build
+        working-directory: src/Hfu.VoiceRegistration.Web
+
+      - name: Copy Frontend Assets to wwwroot
+        run: |
+          mkdir -p src/Hfu.VoiceRegistration.Api/wwwroot
+          cp -r src/Hfu.VoiceRegistration.Web/dist/* src/Hfu.VoiceRegistration.Api/wwwroot/
+
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Publish .NET App
+        run: dotnet publish src/Hfu.VoiceRegistration.Api/Hfu.VoiceRegistration.Api.csproj -c Release -o ./publish
+
+      - name: Deploy to Azure Web App
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ secrets.AZURE_WEBAPP_NAME }}
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: ./publish

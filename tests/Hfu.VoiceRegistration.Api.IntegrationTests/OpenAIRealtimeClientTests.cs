@@ -48,7 +48,7 @@ public sealed class OpenAIRealtimeClientTests
         Assert.Contains("\"threshold\":0.5", handler.Body);
         Assert.Contains("\"prefix_padding_ms\":300", handler.Body);
         Assert.Contains("\"silence_duration_ms\":700", handler.Body);
-        Assert.Contains("\"idle_timeout_ms\":4000", handler.Body);
+        Assert.Contains("\"idle_timeout_ms\":5000", handler.Body);
         Assert.Contains("\"create_response\":true", handler.Body);
         Assert.Contains("\"interrupt_response\":true", handler.Body);
         Assert.Contains("\"tool_choice\":\"auto\"", handler.Body);

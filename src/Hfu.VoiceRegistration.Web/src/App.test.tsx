@@ -98,7 +98,7 @@ const openAIRealtimeClientMock = vi.hoisted(() => {
 
   return {
     client,
-    createOpenAIRealtimeWebRtcClient: vi.fn(() => client),
+    createOpenAIRealtimeWebRtcClient: vi.fn((_options?: unknown) => client),
     emitTranscript(entry: OpenAIRealtimeTranscriptEntry) {
       for (const handler of transcriptHandlers) {
         handler(entry);
@@ -132,6 +132,12 @@ vi.mock("./api/conversationRealtimeClient", () => ({
 
 vi.mock("./api/openAIRealtimeClient", () => ({
   createOpenAIRealtimeWebRtcClient: openAIRealtimeClientMock.createOpenAIRealtimeWebRtcClient
+}));
+
+vi.mock("./api/voiceAssistantClient", () => ({
+  createVoiceAssistantClient: vi.fn((options) =>
+    openAIRealtimeClientMock.createOpenAIRealtimeWebRtcClient(options)),
+  getEffectiveProvider: vi.fn(() => "openai")
 }));
 
 describe("App", () => {

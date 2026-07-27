@@ -12,11 +12,8 @@ import {
   updateRegistrationFields
 } from "./api/registrationClient";
 import { fetchHealth, type HealthResponse } from "./api/healthClient";
-import {
-  createConversationRealtimeClient,
-  type ConversationRealtimeClient
-} from "./api/conversationRealtimeClient";
-import { createOpenAIRealtimeWebRtcClient } from "./api/openAIRealtimeClient";
+import { createConversationRealtimeClient, type ConversationRealtimeClient } from "./api/conversationRealtimeClient";
+import { createVoiceAssistantClient, getEffectiveProvider, type IVoiceAssistantClient } from "./api/voiceAssistantClient";
 import {
   createOpenAIRealtimeToolBridge,
   type OpenAIRealtimeToolActivity,
@@ -159,12 +156,13 @@ export default function App() {
   const [form, setForm] = useState<FormState>(initialForm);
   const [liveState, setLiveState] = useState<RealtimeConnectionState>({ status: "idle" });
   const [liveEvents, setLiveEvents] = useState<ConversationRealtimeEvent[]>([]);
+  const [aiProvider, setAiProvider] = useState<"openai" | "gemini">("openai");
   const [voiceState, setVoiceState] = useState<OpenAIRealtimeVoiceConnectionState>({ status: "idle" });
   const [voiceTranscripts, setVoiceTranscripts] = useState<OpenAIRealtimeTranscriptEntry[]>([]);
   const [voiceEvents, setVoiceEvents] = useState<OpenAIRealtimeEventLogEntry[]>([]);
   const [voiceToolActivities, setVoiceToolActivities] = useState<OpenAIRealtimeToolActivity[]>([]);
   const realtimeClientRef = useRef<ConversationRealtimeClient | null>(null);
-  const voiceClientRef = useRef<OpenAIRealtimeWebRtcClient | null>(null);
+  const voiceClientRef = useRef<IVoiceAssistantClient | null>(null);
   const voiceToolBridgeRef = useRef<OpenAIRealtimeToolBridge | null>(null);
   const voiceUnsubscribersRef = useRef<Array<() => void>>([]);
   const currentSessionIdRef = useRef<string | null>(null);
@@ -395,44 +393,64 @@ export default function App() {
     setVoiceEvents([]);
     setVoiceToolActivities([]);
 
-    const voiceClient = createOpenAIRealtimeWebRtcClient({
+    const provider = getEffectiveProvider();
+    const voiceClient = createVoiceAssistantClient({
       baseUrl: apiBaseUrl,
-      sessionId: currentSessionId
+      sessionId: currentSessionId,
+      provider
     });
     voiceClientRef.current = voiceClient;
-    voiceToolBridgeRef.current = createOpenAIRealtimeToolBridge({
-      sessionId: currentSessionId,
-      baseUrl: apiBaseUrl,
-      voiceClient,
-      onToolResult: applyToolResult,
-      onActivity: (activity) => {
-        setVoiceToolActivities((current) => upsertToolActivity(current, activity).slice(0, 6));
-      }
-    });
-    voiceUnsubscribersRef.current = [
-      voiceClient.onStateChange(setVoiceState),
-      voiceClient.onTranscript((entry) => {
-        setVoiceTranscripts((current) => upsertTranscriptEntry(current, entry).slice(-12));
-      }),
-      voiceClient.onEvent((event) => {
-        setVoiceEvents((current) => [
-          event,
-          ...current.filter((item) => item.id !== event.id)
-        ].slice(0, 6));
-      })
+
+    if (provider === "openai") {
+      voiceToolBridgeRef.current = createOpenAIRealtimeToolBridge({
+        sessionId: currentSessionId,
+        baseUrl: apiBaseUrl,
+        voiceClient: voiceClient as any,
+        onToolResult: applyToolResult,
+        onActivity: (activity) => {
+          setVoiceToolActivities((current) => upsertToolActivity(current, activity).slice(0, 6));
+        }
+      });
+    }
+
+    const unsubscribers: Array<() => void> = [
+      voiceClient.onStateChange(setVoiceState)
     ];
+
+    if (voiceClient.onTranscript) {
+      unsubscribers.push(
+        voiceClient.onTranscript((entry) => {
+          setVoiceTranscripts((current) => upsertTranscriptEntry(current, entry).slice(-12));
+        })
+      );
+    }
+
+    if (voiceClient.onEvent) {
+      unsubscribers.push(
+        voiceClient.onEvent((event) => {
+          setVoiceEvents((current) => [
+            event,
+            ...current.filter((item) => item.id !== event.id)
+          ].slice(0, 6));
+        })
+      );
+    }
+
+    voiceUnsubscribersRef.current = unsubscribers;
 
     try {
       await voiceClient.start();
-      voiceClient.sendEvent({
-        type: "response.create",
-        response: {
-          instructions: startInterviewInstructions
-        }
-      });
+      if (voiceClient.sendEvent) {
+        voiceClient.sendEvent({
+          type: "response.create",
+          response: {
+            instructions: startInterviewInstructions
+          }
+        });
+      }
     } catch (error: unknown) {
       disposeVoiceClient();
-      const problemDetails = toProblem(error, "Не удалось запустить голосовую связь.");
+      const problemDetails = toProblem(error, `Не удалось запустить связь (${provider}).`);
       setProblem(problemDetails);
       setVoiceState({
         status: "error",
@@ -569,7 +587,7 @@ export default function App() {
               ...current,
               status: "Completed",
               version: result.state?.version ?? current.version,
-              registrationResult: completion.registrationResult,
+      registrationResult: completion.registrationResult,
               state: result.state ?? current.state
             }
           : current);
@@ -659,14 +677,10 @@ export default function App() {
                 label="Область до войны"
                 value={form.regionBeforeWar}
                 onChange={(value) => updateForm("regionBeforeWar", value)}
-                options={regions.map((region) => ({
-                  value: region.name,
-                  label: `${region.name} до войны`
-                }))}
+                options={regions.map((region) => ({ value: region.name, label: region.name }))}
               />
               <TextInput
                 label="Год справки ВПО"
-                type="number"
                 value={form.displacedCertificateYear}
                 onChange={(value) => updateForm("displacedCertificateYear", value)}
               />
@@ -677,72 +691,49 @@ export default function App() {
                 <input
                   type="checkbox"
                   checked={form.personalDataConsent}
-                  onChange={(event) => updateForm("personalDataConsent", event.target.checked)}
+                  onChange={(e) => updateForm("personalDataConsent", e.target.checked)}
                 />
-                Согласие на обработку данных
+                Согласие на обработку перс. данных
               </label>
               <label>
                 <input
                   type="checkbox"
                   checked={form.registrationConfirmed}
-                  onChange={(event) => updateForm("registrationConfirmed", event.target.checked)}
+                  onChange={(e) => updateForm("registrationConfirmed", e.target.checked)}
                 />
-                Финальное подтверждение
+                Окончательное подтверждение регистрации
               </label>
             </div>
-          </section>
 
-          <section className="panel actions-panel" aria-labelledby="actions-title">
-            <div className="panel-header">
-              <h2 id="actions-title">Инструменты регистрации</h2>
-            </div>
-
-            <div className="action-stack">
-              <button type="button" onClick={handleUpdateFields} disabled={!currentSessionId}>
+            <div className="button-row form-actions">
+              <button
+                type="button"
+                className="primary-button"
+                onClick={handleUpdateFields}
+                disabled={!currentSessionId || isBusy}
+              >
                 Сохранить поля
               </button>
-              <button type="button" onClick={handleConfirmFields} disabled={!currentSessionId}>
-                Подтвердить заполненные
+              <button
+                type="button"
+                onClick={handleConfirmFields}
+                disabled={!currentSessionId || isBusy}
+              >
+                Подтвердить поля
               </button>
-              <button type="button" onClick={handleGetState} disabled={!currentSessionId}>
-                Обновить состояние
-              </button>
-              <button type="button" className="primary-button" onClick={handleCompleteRegistration} disabled={!currentSessionId}>
+              <button
+                type="button"
+                onClick={handleCompleteRegistration}
+                disabled={!currentSessionId || isBusy}
+              >
                 Завершить регистрацию
               </button>
             </div>
-
-            <div className="developer-grid">
-              <TextInput
-                label="Поля для уточнения"
-                value={form.clarificationFields}
-                onChange={(value) => updateForm("clarificationFields", value)}
-              />
-              <TextInput
-                label="Причина уточнения"
-                value={form.clarificationReason}
-                onChange={(value) => updateForm("clarificationReason", value)}
-              />
-              <button type="button" onClick={handleMarkClarification} disabled={!currentSessionId}>
-                Уточнить поля
-              </button>
-              <TextInput
-                label="Поля для очистки"
-                value={form.clearFields}
-                onChange={(value) => updateForm("clearFields", value)}
-              />
-              <button type="button" onClick={handleClearFields} disabled={!currentSessionId}>
-                Очистить поля
-              </button>
-            </div>
           </section>
-        </section>
 
-        <section className="layout-grid layout-grid--wide" aria-label="Результаты backend">
-          <RegistrationStatePanel state={registrationState} fieldMap={fieldMap} />
-          <ToolFeedbackPanel result={lastToolResult} />
-          <CompletionPanel result={lastToolResult} />
-          <LiveEventsPanel events={liveEvents} />
+          <section className="layout-side">
+            <LiveEventsPanel events={liveEvents} />
+          </section>
         </section>
       </section>
     </main>
@@ -852,6 +843,9 @@ function VoicePanel({
   onStartVoice: () => void;
   onStopVoice: () => void;
 }) {
+  const provider = getEffectiveProvider();
+  const providerLabel = provider === "gemini" ? "Gemini Live" : "OpenAI Realtime";
+
   const statusClassName = voiceState.status === "connected"
     ? "inline-status inline-status--good"
     : voiceState.status === "error"
@@ -861,7 +855,7 @@ function VoicePanel({
   return (
     <section className="panel voice-panel" aria-labelledby="voice-panel-title">
       <div className="panel-header">
-        <h2 id="voice-panel-title">Голос</h2>
+        <h2 id="voice-panel-title">Голос <span style={{ fontSize: "0.75rem", opacity: 0.8, fontWeight: "normal" }}>({providerLabel})</span></h2>
         <span className={statusClassName}>{translateVoiceStatus(voiceState.status)}</span>
       </div>
 
