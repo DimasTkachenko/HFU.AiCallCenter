@@ -25,7 +25,24 @@ export interface IVoiceAssistantClient {
   onToolCall?: (handler: (toolCall: OpenAIRealtimeToolCall) => void) => () => void;
 }
 
+export function setStoredProvider(provider: AIProvider): void {
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem("hfu.voiceRegistration.provider", provider);
+  }
+}
+
 export function getEffectiveProvider(): AIProvider {
+  if (typeof window !== "undefined") {
+    const urlParam = new URLSearchParams(window.location.search).get("provider")?.toLowerCase().trim();
+    if (urlParam === "gemini" || urlParam === "openai") {
+      return urlParam;
+    }
+    const stored = window.localStorage.getItem("hfu.voiceRegistration.provider")?.toLowerCase().trim();
+    if (stored === "gemini" || stored === "openai") {
+      return stored;
+    }
+  }
+
   const envProvider = (import.meta.env.VITE_AI_PROVIDER ?? "").toLowerCase().trim();
   if (envProvider === "gemini") {
     return "gemini";

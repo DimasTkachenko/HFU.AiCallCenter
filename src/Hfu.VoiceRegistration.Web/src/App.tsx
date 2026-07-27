@@ -13,7 +13,7 @@ import {
 } from "./api/registrationClient";
 import { fetchHealth, type HealthResponse } from "./api/healthClient";
 import { createConversationRealtimeClient, type ConversationRealtimeClient } from "./api/conversationRealtimeClient";
-import { createVoiceAssistantClient, getEffectiveProvider, type IVoiceAssistantClient } from "./api/voiceAssistantClient";
+import { createVoiceAssistantClient, getEffectiveProvider, setStoredProvider, type AIProvider, type IVoiceAssistantClient } from "./api/voiceAssistantClient";
 import {
   createOpenAIRealtimeToolBridge,
   type OpenAIRealtimeToolActivity,
@@ -638,6 +638,10 @@ export default function App() {
             canStop={canStopVoice}
             onStartVoice={handleStartVoice}
             onStopVoice={handleStopVoice}
+            onProviderChange={(next) => {
+              setStoredProvider(next);
+              setAiProvider(next);
+            }}
           />
         </section>
 
@@ -835,7 +839,8 @@ function VoicePanel({
   canStart,
   canStop,
   onStartVoice,
-  onStopVoice
+  onStopVoice,
+  onProviderChange
 }: {
   voiceState: OpenAIRealtimeVoiceConnectionState;
   transcripts: OpenAIRealtimeTranscriptEntry[];
@@ -845,9 +850,9 @@ function VoicePanel({
   canStop: boolean;
   onStartVoice: () => void;
   onStopVoice: () => void;
+  onProviderChange: (provider: AIProvider) => void;
 }) {
   const provider = getEffectiveProvider();
-  const providerLabel = provider === "gemini" ? "Gemini Live" : "OpenAI Realtime";
 
   const statusClassName = voiceState.status === "connected"
     ? "inline-status inline-status--good"
@@ -858,7 +863,16 @@ function VoicePanel({
   return (
     <section className="panel voice-panel" aria-labelledby="voice-panel-title">
       <div className="panel-header">
-        <h2 id="voice-panel-title">Голос <span style={{ fontSize: "0.75rem", opacity: 0.8, fontWeight: "normal" }}>({providerLabel})</span></h2>
+        <h2 id="voice-panel-title">Голос</h2>
+        <select
+          value={provider}
+          onChange={(e) => onProviderChange(e.target.value as AIProvider)}
+          style={{ fontSize: "0.8rem", padding: "2px 6px" }}
+          aria-label="ИИ-провайдер голоса"
+        >
+          <option value="openai">OpenAI Realtime</option>
+          <option value="gemini">Gemini Live</option>
+        </select>
         <span className={statusClassName}>{translateVoiceStatus(voiceState.status)}</span>
       </div>
 
