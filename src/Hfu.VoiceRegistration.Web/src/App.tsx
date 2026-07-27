@@ -733,6 +733,9 @@ export default function App() {
 
           <section className="layout-side">
             <LiveEventsPanel events={liveEvents} />
+            <RegistrationStatePanel state={registrationState} fieldMap={fieldMap} />
+            <ToolFeedbackPanel result={lastToolResult} />
+            <CompletionPanel result={lastToolResult} />
           </section>
         </section>
       </section>
