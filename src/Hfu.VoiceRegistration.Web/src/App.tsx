@@ -97,7 +97,9 @@ const demoForm: FormState = {
   phoneNumber: "+380501112233",
   currentRegion: "Харківська область",
   currentCity: "Харків",
-  userCategory: "Other"
+  userCategory: "Other",
+  personalDataConsent: true,
+  registrationConfirmed: true
 };
 
 const fieldLabels: Record<string, string> = {
@@ -591,7 +593,7 @@ export default function App() {
               state: result.state ?? current.state
             }
           : current);
-        setNotice("Регистрация завершена");
+        setNotice("Регистрация завершена и сохранена в PostgreSQL!");
       }
     });
   }

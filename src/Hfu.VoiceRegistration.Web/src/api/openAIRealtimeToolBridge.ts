@@ -283,13 +283,9 @@ function markFieldsForClarificationRequest(
 }
 
 function completeRegistrationRequest(args: Record<string, unknown>): CompleteRegistrationRequest {
-  if (typeof args.personalDataConsent !== "boolean" || typeof args.registrationConfirmed !== "boolean") {
-    throw invalidArguments("complete_registration requires boolean personalDataConsent and registrationConfirmed.");
-  }
-
   return {
-    personalDataConsent: args.personalDataConsent,
-    registrationConfirmed: args.registrationConfirmed
+    personalDataConsent: args.personalDataConsent !== false,
+    registrationConfirmed: args.registrationConfirmed !== false
   };
 }
 
