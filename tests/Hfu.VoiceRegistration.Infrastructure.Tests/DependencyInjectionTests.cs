@@ -44,4 +44,16 @@ public sealed class DependencyInjectionTests
         Assert.Equal(TimeSpan.FromMinutes(5), options.CleanupInterval);
         Assert.Contains(hostedServices, service => service is ConversationSessionCleanupService);
     }
+
+    [Fact]
+    public void FormatPostgresConnectionString_FormatsNeonUriCorrectly()
+    {
+        var uriString = "postgresql://neondb_owner:npg_xFACIL19Tbra@ep-orange-bar-ayxlne1x.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require";
+        var formatted = DependencyInjection.FormatPostgresConnectionString(uriString);
+
+        Assert.Contains("Host=ep-orange-bar-ayxlne1x.c-5.us-east-2.aws.neon.tech", formatted);
+        Assert.Contains("Database=neondb", formatted);
+        Assert.Contains("Username=neondb_owner", formatted);
+        Assert.Contains("Password=npg_xFACIL19Tbra", formatted);
+    }
 }

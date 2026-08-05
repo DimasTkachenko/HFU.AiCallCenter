@@ -2,13 +2,17 @@ using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using Hfu.VoiceRegistration.Api.Endpoints;
 using Hfu.VoiceRegistration.Api.OpenAIRealtime;
-using Hfu.VoiceRegistration.Api.GeminiLive; // Added for GeminiLiveOptions and IGeminiLiveClient
-using Hfu.VoiceRegistration.Infrastructure.GeminiLive; // Added for GeminiLiveClient
+using Hfu.VoiceRegistration.Api.GeminiLive;
+using Hfu.VoiceRegistration.Infrastructure.GeminiLive;
 using Hfu.VoiceRegistration.Api.Realtime;
 using Hfu.VoiceRegistration.Application;
+using Hfu.VoiceRegistration.Application.Persistence;
 using Hfu.VoiceRegistration.Infrastructure;
+using Hfu.VoiceRegistration.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
-using Microsoft.Extensions.Options; // Added for IOptions
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -74,6 +78,16 @@ builder.Services.AddInfrastructure(builder.Configuration);
 
 var app = builder.Build();
 
+// Ensure PostgreSQL DB tables are created automatically on startup if DbContext is registered
+using (var scope = app.Services.CreateScope())
+{
+    var dbContext = scope.ServiceProvider.GetService<VoiceRegistrationDbContext>();
+    if (dbContext != null)
+    {
+        await dbContext.Database.EnsureCreatedAsync();
+    }
+}
+
 app.UseSwagger();
 app.UseSwaggerUI();
 app.UseWebSockets();
@@ -92,6 +106,19 @@ app.MapGet("/health", () =>
         TimestampUtc: DateTimeOffset.UtcNow,
         Version: version));
 });
+
+app.MapGet("/api/registrations", async ([FromServices] IRegistrationRepository? repository, CancellationToken cancellationToken) =>
+{
+    if (repository is null)
+    {
+        return Results.Ok(Array.Empty<CompletedRegistrationRecord>());
+    }
+
+    var registrations = await repository.GetCompletedRegistrationsAsync(cancellationToken);
+    return Results.Ok(registrations);
+})
+.WithName("GetCompletedRegistrations")
+.WithTags("Registrations");
 
 app.MapConversationSessionEndpoints();
 app.MapRegistrationToolEndpoints();

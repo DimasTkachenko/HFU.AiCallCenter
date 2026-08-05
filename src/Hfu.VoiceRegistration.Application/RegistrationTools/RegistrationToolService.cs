@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Net.Mail;
 using System.Text.Json;
 using Hfu.VoiceRegistration.Application.Conversations;
+using Hfu.VoiceRegistration.Application.Persistence;
 using Hfu.VoiceRegistration.Application.RegistrationCompletion;
 using Hfu.VoiceRegistration.Application.ReferenceData;
 using Hfu.VoiceRegistration.Domain.Conversations;
@@ -24,12 +25,14 @@ public sealed class RegistrationToolService : IRegistrationToolService
     private readonly IRegionResolver _regionResolver;
     private readonly IFakeHfuRegistrationService? _fakeHfuRegistrationService;
     private readonly RegistrationFieldRegistry _fieldRegistry;
+    private readonly IRegistrationRepository? _repository;
 
     public RegistrationToolService(
         IConversationSessionStore store,
         TimeProvider timeProvider,
         IRegionResolver? regionResolver = null,
-        IFakeHfuRegistrationService? fakeHfuRegistrationService = null)
+        IFakeHfuRegistrationService? fakeHfuRegistrationService = null,
+        IRegistrationRepository? repository = null)
     {
         _store = store;
         _timeProvider = timeProvider;
@@ -37,6 +40,7 @@ public sealed class RegistrationToolService : IRegistrationToolService
             ?? new RegionResolver(new UkrainianRegionReferenceDataProvider());
         _fakeHfuRegistrationService = fakeHfuRegistrationService;
         _fieldRegistry = RegistrationFieldRegistry.Instance;
+        _repository = repository;
     }
 
     public async Task<RegistrationToolResult> UpdateRegistrationFieldsAsync(
@@ -344,6 +348,20 @@ public sealed class RegistrationToolService : IRegistrationToolService
         }
 
         var state = CreateState(updated);
+
+        if (errors.Count == 0 && completion is not null && _repository is not null)
+        {
+            await _repository.SaveCompletedRegistrationAsync(
+                sessionId,
+                completion.FinalRegistration,
+                completion.RegistrationResult,
+                cancellationToken);
+
+            await _repository.SaveSessionRecordAsync(
+                updated,
+                cancellationToken);
+        }
+
         return errors.Count == 0
             ? RegistrationToolResult.Success(state, completion)
             : RegistrationToolResult.Failure(state, errors, completion);
