@@ -23,7 +23,7 @@ public sealed class VoiceRegistrationDbContext : DbContext
             b.ToTable("UserRegistrations");
             b.HasKey(x => x.Id);
             b.HasIndex(x => x.SessionId).IsUnique();
-            b.HasIndex(x => x.DemoRegistrationId).IsUnique();
+            b.HasIndex(x => x.DemoRegistrationId);
             b.HasIndex(x => x.PhoneNumber);
             b.HasIndex(x => x.CompletedAt);
 
