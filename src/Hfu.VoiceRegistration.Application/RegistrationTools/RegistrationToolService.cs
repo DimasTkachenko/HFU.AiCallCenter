@@ -8,6 +8,8 @@ using Hfu.VoiceRegistration.Application.ReferenceData;
 using Hfu.VoiceRegistration.Domain.Conversations;
 using Hfu.VoiceRegistration.Domain.Registration;
 
+using Microsoft.Extensions.Logging;
+
 namespace Hfu.VoiceRegistration.Application.RegistrationTools;
 
 public sealed class RegistrationToolService : IRegistrationToolService
@@ -26,13 +28,15 @@ public sealed class RegistrationToolService : IRegistrationToolService
     private readonly IFakeHfuRegistrationService? _fakeHfuRegistrationService;
     private readonly RegistrationFieldRegistry _fieldRegistry;
     private readonly IRegistrationRepository? _repository;
+    private readonly ILogger<RegistrationToolService>? _logger;
 
     public RegistrationToolService(
         IConversationSessionStore store,
         TimeProvider timeProvider,
         IRegionResolver? regionResolver = null,
         IFakeHfuRegistrationService? fakeHfuRegistrationService = null,
-        IRegistrationRepository? repository = null)
+        IRegistrationRepository? repository = null,
+        ILogger<RegistrationToolService>? logger = null)
     {
         _store = store;
         _timeProvider = timeProvider;
@@ -41,6 +45,7 @@ public sealed class RegistrationToolService : IRegistrationToolService
         _fakeHfuRegistrationService = fakeHfuRegistrationService;
         _fieldRegistry = RegistrationFieldRegistry.Instance;
         _repository = repository;
+        _logger = logger;
     }
 
     public async Task<RegistrationToolResult> UpdateRegistrationFieldsAsync(
@@ -349,17 +354,39 @@ public sealed class RegistrationToolService : IRegistrationToolService
 
         var state = CreateState(updated);
 
-        if (errors.Count == 0 && completion is not null && _repository is not null)
+        if (errors.Count > 0)
         {
-            await _repository.SaveCompletedRegistrationAsync(
+            _logger?.LogWarning(
+                "CompleteRegistrationAsync failed for session {SessionId} with {ErrorCount} error(s): {Errors}",
                 sessionId,
-                completion.FinalRegistration,
-                completion.RegistrationResult,
-                cancellationToken);
+                errors.Count,
+                string.Join("; ", errors.Select(e => e.Message)));
+        }
+        else if (completion is not null)
+        {
+            if (_repository is null)
+            {
+                _logger?.LogWarning(
+                    "CompleteRegistrationAsync succeeded for session {SessionId}, but IRegistrationRepository is null (DefaultConnection string missing in config). DB save skipped.",
+                    sessionId);
+            }
+            else
+            {
+                await _repository.SaveCompletedRegistrationAsync(
+                    sessionId,
+                    completion.FinalRegistration,
+                    completion.RegistrationResult,
+                    cancellationToken);
 
-            await _repository.SaveSessionRecordAsync(
-                updated,
-                cancellationToken);
+                await _repository.SaveSessionRecordAsync(
+                    updated,
+                    cancellationToken);
+
+                _logger?.LogInformation(
+                    "Successfully saved completed registration for session {SessionId} (DemoId: {DemoId}) to PostgreSQL DB!",
+                    sessionId,
+                    completion.RegistrationResult.RegistrationId);
+            }
         }
 
         return errors.Count == 0
